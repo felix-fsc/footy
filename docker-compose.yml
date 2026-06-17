@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: footy-postgres
+    environment:
+      POSTGRES_DB: footy
+      POSTGRES_USER: footy
+      POSTGRES_PASSWORD: footy
+    ports:
+      - "5433:5432"
+    volumes:
+      - footy-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U footy -d footy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  footy-postgres-data:
