@@ -10,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -54,6 +55,11 @@ public class MatchController {
             @PathVariable UUID id,
             @Valid @RequestBody JoinMatchRequest request) {
         return matchService.joinMatch(UUID.fromString(jwt.getSubject()), id, request);
+    }
+
+    @PatchMapping("/{id}/cancel")
+    MatchResponse cancelMatch(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        return matchService.cancelMatch(UUID.fromString(jwt.getSubject()), id);
     }
 
     @DeleteMapping("/{id}/leave")

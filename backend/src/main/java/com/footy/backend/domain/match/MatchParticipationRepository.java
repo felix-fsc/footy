@@ -13,6 +13,9 @@ public interface MatchParticipationRepository extends JpaRepository<MatchPartici
 
     Optional<MatchParticipation> findByMatchIdAndUserId(UUID matchId, UUID userId);
 
+    @EntityGraph(attributePaths = {"user"})
+    List<MatchParticipation> findAllByMatchIdAndStatusOrderByJoinedAtAsc(UUID matchId, ParticipationStatus status);
+
     @EntityGraph(attributePaths = {"match", "match.field", "match.createdBy"})
     List<MatchParticipation> findAllByUserIdAndStatusOrderByMatchStartsAtAsc(UUID userId, ParticipationStatus status);
 }

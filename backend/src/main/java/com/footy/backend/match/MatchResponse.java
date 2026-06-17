@@ -13,5 +13,6 @@ public record MatchResponse(
         MatchStatus status,
         MatchCreatorResponse createdBy,
         FieldResponse field,
-        MatchOccupancyResponse occupancy) {
+        MatchOccupancyResponse occupancy,
+        MatchTeamsResponse teams) {
 }

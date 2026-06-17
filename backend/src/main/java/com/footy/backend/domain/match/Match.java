@@ -86,4 +86,8 @@ public class Match extends AuditableEntity {
     public User getCreatedBy() {
         return createdBy;
     }
+
+    public void cancel() {
+        this.status = MatchStatus.CANCELLED;
+    }
 }

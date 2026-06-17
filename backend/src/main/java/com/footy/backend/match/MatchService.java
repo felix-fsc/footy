@@ -44,7 +44,7 @@ public class MatchService {
 
     @Transactional(readOnly = true)
     public List<MatchResponse> listMatches() {
-        return matchRepository.findAllByOrderByStartsAtAsc().stream()
+        return matchRepository.findAllByStatusOrderByStartsAtAsc(MatchStatus.OPEN).stream()
                 .map(this::toResponseWithOccupancy)
                 .toList();
     }
@@ -104,6 +104,21 @@ public class MatchService {
     }
 
     @Transactional
+    public MatchResponse cancelMatch(UUID currentUserId, UUID matchId) {
+        Match match = getMatchOrNotFound(matchId);
+
+        if (!match.getCreatedBy().getId().equals(currentUserId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the match creator can cancel this match");
+        }
+
+        if (match.getStatus() != MatchStatus.OPEN) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only open matches can be cancelled");
+        }
+
+        match.cancel();
+        return toResponseWithOccupancy(match);
+    }
+    @Transactional
     public void leaveMatch(UUID currentUserId, UUID matchId) {
         MatchParticipation participation = participationRepository.findByMatchIdAndUserId(matchId, currentUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participation not found"));
@@ -116,10 +131,10 @@ public class MatchService {
     }
 
     private MatchResponse toResponseWithOccupancy(Match match) {
-        return MatchMapper.toResponse(
-                match,
-                countActivePlayers(match.getId(), TeamSide.A),
-                countActivePlayers(match.getId(), TeamSide.B));
+        List<MatchParticipation> activeParticipations = participationRepository.findAllByMatchIdAndStatusOrderByJoinedAtAsc(
+                match.getId(),
+                ParticipationStatus.ACTIVE);
+        return MatchMapper.toResponse(match, activeParticipations);
     }
 
     private long countActivePlayers(UUID matchId, TeamSide teamSide) {

@@ -8,8 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MatchRepository extends JpaRepository<Match, UUID> {
 
+    boolean existsByTitle(String title);
+
     @EntityGraph(attributePaths = {"field", "createdBy"})
-    List<Match> findAllByOrderByStartsAtAsc();
+    List<Match> findAllByStatusOrderByStartsAtAsc(MatchStatus status);
 
     @EntityGraph(attributePaths = {"field", "createdBy"})
     List<Match> findAllByCreatedByIdOrderByStartsAtAsc(UUID createdById);
