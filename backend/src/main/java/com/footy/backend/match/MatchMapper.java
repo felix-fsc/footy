@@ -9,6 +9,10 @@ final class MatchMapper {
     }
 
     static MatchResponse toResponse(Match match) {
+        return toResponse(match, 0, 0);
+    }
+
+    static MatchResponse toResponse(Match match, long teamAPlayers, long teamBPlayers) {
         return new MatchResponse(
                 match.getId(),
                 match.getTitle(),
@@ -16,7 +20,8 @@ final class MatchMapper {
                 match.getMaxPlayersPerTeam(),
                 match.getStatus(),
                 new MatchCreatorResponse(match.getCreatedBy().getId(), match.getCreatedBy().getDisplayName()),
-                toFieldResponse(match.getField()));
+                toFieldResponse(match.getField()),
+                new MatchOccupancyResponse(teamAPlayers, teamBPlayers, match.getMaxPlayersPerTeam()));
     }
 
     private static FieldResponse toFieldResponse(Field field) {

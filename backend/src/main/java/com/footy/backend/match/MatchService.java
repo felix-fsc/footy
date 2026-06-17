@@ -19,6 +19,7 @@ import com.footy.backend.domain.match.MatchParticipationRepository;
 import com.footy.backend.domain.match.MatchRepository;
 import com.footy.backend.domain.match.MatchStatus;
 import com.footy.backend.domain.match.ParticipationStatus;
+import com.footy.backend.domain.match.TeamSide;
 import com.footy.backend.domain.user.User;
 import com.footy.backend.domain.user.UserRepository;
 
@@ -44,10 +45,9 @@ public class MatchService {
     @Transactional(readOnly = true)
     public List<MatchResponse> listMatches() {
         return matchRepository.findAllByOrderByStartsAtAsc().stream()
-                .map(MatchMapper::toResponse)
+                .map(this::toResponseWithOccupancy)
                 .toList();
     }
-
 
     @Transactional(readOnly = true)
     public List<MatchResponse> listMyMatches(UUID currentUserId) {
@@ -61,9 +61,10 @@ public class MatchService {
 
         return matches.values().stream()
                 .sorted(Comparator.comparing(Match::getStartsAt))
-                .map(MatchMapper::toResponse)
+                .map(this::toResponseWithOccupancy)
                 .toList();
     }
+
     @Transactional
     public MatchResponse createMatch(UUID currentUserId, CreateMatchRequest request) {
         User creator = getUserOrUnauthorized(currentUserId);
@@ -71,14 +72,14 @@ public class MatchService {
         Field field = createField(request.field());
         Match match = new Match(request.title().trim(), field, request.startsAt(), request.maxPlayersPerTeam(), creator);
 
-        return MatchMapper.toResponse(matchRepository.save(match));
+        return toResponseWithOccupancy(matchRepository.save(match));
     }
 
     @Transactional(readOnly = true)
     public MatchResponse getMatch(UUID id) {
         Match match = getMatchOrNotFound(id);
         initializeMatchResponseRelations(match);
-        return MatchMapper.toResponse(match);
+        return toResponseWithOccupancy(match);
     }
 
     @Transactional
@@ -90,10 +91,7 @@ public class MatchService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Match is not open");
         }
 
-        long activePlayersInTeam = participationRepository.countByMatchIdAndTeamSideAndStatus(
-                matchId,
-                request.teamSide(),
-                ParticipationStatus.ACTIVE);
+        long activePlayersInTeam = countActivePlayers(matchId, request.teamSide());
         if (activePlayersInTeam >= match.getMaxPlayersPerTeam()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Team is full");
         }
@@ -115,6 +113,20 @@ public class MatchService {
         }
 
         participation.leave();
+    }
+
+    private MatchResponse toResponseWithOccupancy(Match match) {
+        return MatchMapper.toResponse(
+                match,
+                countActivePlayers(match.getId(), TeamSide.A),
+                countActivePlayers(match.getId(), TeamSide.B));
+    }
+
+    private long countActivePlayers(UUID matchId, TeamSide teamSide) {
+        return participationRepository.countByMatchIdAndTeamSideAndStatus(
+                matchId,
+                teamSide,
+                ParticipationStatus.ACTIVE);
     }
 
     private MatchParticipation rejoin(MatchParticipation participation, JoinMatchRequest request) {

@@ -50,6 +50,13 @@ public class PlayerProfile extends AuditableEntity {
         this.city = city;
     }
 
+    public void update(String fullName, String bio, PlayerPosition preferredPosition, String city) {
+        this.fullName = fullName;
+        this.bio = bio;
+        this.preferredPosition = preferredPosition;
+        this.city = city;
+    }
+
     public UUID getId() {
         return id;
     }

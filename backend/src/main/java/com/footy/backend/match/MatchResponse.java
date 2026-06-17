@@ -12,5 +12,6 @@ public record MatchResponse(
         int maxPlayersPerTeam,
         MatchStatus status,
         MatchCreatorResponse createdBy,
-        FieldResponse field) {
+        FieldResponse field,
+        MatchOccupancyResponse occupancy) {
 }
