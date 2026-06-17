@@ -54,6 +54,16 @@ public class MatchParticipation {
         this.teamSide = teamSide;
     }
 
+    public void rejoin(TeamSide teamSide) {
+        this.teamSide = teamSide;
+        this.status = ParticipationStatus.ACTIVE;
+        this.joinedAt = Instant.now();
+    }
+
+    public void leave() {
+        this.status = ParticipationStatus.LEFT;
+    }
+
     public UUID getId() {
         return id;
     }

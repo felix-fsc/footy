@@ -10,4 +10,7 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
 
     @EntityGraph(attributePaths = {"field", "createdBy"})
     List<Match> findAllByOrderByStartsAtAsc();
+
+    @EntityGraph(attributePaths = {"field", "createdBy"})
+    List<Match> findAllByCreatedByIdOrderByStartsAtAsc(UUID createdById);
 }

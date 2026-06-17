@@ -1,6 +1,9 @@
 package com.footy.backend.match;
 
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
@@ -11,7 +14,11 @@ import org.springframework.web.server.ResponseStatusException;
 import com.footy.backend.domain.field.Field;
 import com.footy.backend.domain.field.FieldRepository;
 import com.footy.backend.domain.match.Match;
+import com.footy.backend.domain.match.MatchParticipation;
+import com.footy.backend.domain.match.MatchParticipationRepository;
 import com.footy.backend.domain.match.MatchRepository;
+import com.footy.backend.domain.match.MatchStatus;
+import com.footy.backend.domain.match.ParticipationStatus;
 import com.footy.backend.domain.user.User;
 import com.footy.backend.domain.user.UserRepository;
 
@@ -19,11 +26,17 @@ import com.footy.backend.domain.user.UserRepository;
 public class MatchService {
 
     private final MatchRepository matchRepository;
+    private final MatchParticipationRepository participationRepository;
     private final FieldRepository fieldRepository;
     private final UserRepository userRepository;
 
-    public MatchService(MatchRepository matchRepository, FieldRepository fieldRepository, UserRepository userRepository) {
+    public MatchService(
+            MatchRepository matchRepository,
+            MatchParticipationRepository participationRepository,
+            FieldRepository fieldRepository,
+            UserRepository userRepository) {
         this.matchRepository = matchRepository;
+        this.participationRepository = participationRepository;
         this.fieldRepository = fieldRepository;
         this.userRepository = userRepository;
     }
@@ -35,10 +48,25 @@ public class MatchService {
                 .toList();
     }
 
+
+    @Transactional(readOnly = true)
+    public List<MatchResponse> listMyMatches(UUID currentUserId) {
+        getUserOrUnauthorized(currentUserId);
+
+        Map<UUID, Match> matches = new LinkedHashMap<>();
+        matchRepository.findAllByCreatedByIdOrderByStartsAtAsc(currentUserId)
+                .forEach(match -> matches.put(match.getId(), match));
+        participationRepository.findAllByUserIdAndStatusOrderByMatchStartsAtAsc(currentUserId, ParticipationStatus.ACTIVE)
+                .forEach(participation -> matches.putIfAbsent(participation.getMatch().getId(), participation.getMatch()));
+
+        return matches.values().stream()
+                .sorted(Comparator.comparing(Match::getStartsAt))
+                .map(MatchMapper::toResponse)
+                .toList();
+    }
     @Transactional
     public MatchResponse createMatch(UUID currentUserId, CreateMatchRequest request) {
-        User creator = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
+        User creator = getUserOrUnauthorized(currentUserId);
 
         Field field = createField(request.field());
         Match match = new Match(request.title().trim(), field, request.startsAt(), request.maxPlayersPerTeam(), creator);
@@ -48,15 +76,70 @@ public class MatchService {
 
     @Transactional(readOnly = true)
     public MatchResponse getMatch(UUID id) {
-        Match match = matchRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Match not found"));
+        Match match = getMatchOrNotFound(id);
+        initializeMatchResponseRelations(match);
+        return MatchMapper.toResponse(match);
+    }
 
+    @Transactional
+    public MatchParticipationResponse joinMatch(UUID currentUserId, UUID matchId, JoinMatchRequest request) {
+        User user = getUserOrUnauthorized(currentUserId);
+        Match match = getMatchOrNotFound(matchId);
+
+        if (match.getStatus() != MatchStatus.OPEN) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Match is not open");
+        }
+
+        long activePlayersInTeam = participationRepository.countByMatchIdAndTeamSideAndStatus(
+                matchId,
+                request.teamSide(),
+                ParticipationStatus.ACTIVE);
+        if (activePlayersInTeam >= match.getMaxPlayersPerTeam()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Team is full");
+        }
+
+        MatchParticipation participation = participationRepository.findByMatchIdAndUserId(matchId, currentUserId)
+                .map(existingParticipation -> rejoin(existingParticipation, request))
+                .orElseGet(() -> new MatchParticipation(match, user, request.teamSide()));
+
+        return MatchParticipationMapper.toResponse(participationRepository.save(participation));
+    }
+
+    @Transactional
+    public void leaveMatch(UUID currentUserId, UUID matchId) {
+        MatchParticipation participation = participationRepository.findByMatchIdAndUserId(matchId, currentUserId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Participation not found"));
+
+        if (participation.getStatus() != ParticipationStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is not currently participating in this match");
+        }
+
+        participation.leave();
+    }
+
+    private MatchParticipation rejoin(MatchParticipation participation, JoinMatchRequest request) {
+        if (participation.getStatus() == ParticipationStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "User is already participating in this match");
+        }
+        participation.rejoin(request.teamSide());
+        return participation;
+    }
+
+    private User getUserOrUnauthorized(UUID userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
+    }
+
+    private Match getMatchOrNotFound(UUID id) {
+        return matchRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Match not found"));
+    }
+
+    private void initializeMatchResponseRelations(Match match) {
         match.getCreatedBy().getDisplayName();
         if (match.getField() != null) {
             match.getField().getName();
         }
-
-        return MatchMapper.toResponse(match);
     }
 
     private Field createField(CreateFieldRequest request) {
