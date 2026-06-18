@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  ImageBackground,
   PanResponder,
   Platform,
   Pressable,
@@ -207,6 +208,7 @@ export default function App() {
   const [profileBio, setProfileBio] = useState("");
   const [profilePosition, setProfilePosition] =
     useState<PlayerPosition>("MIDFIELDER");
+  const [profileEditing, setProfileEditing] = useState(false);
 
   const [newTitle, setNewTitle] = useState("Partido Footy");
   const [newFieldName, setNewFieldName] = useState("Campo Municipal Saladillo");
@@ -251,6 +253,7 @@ export default function App() {
   );
   const selectedIsOpen = selectedMatch?.status === "OPEN";
   const nextMyMatch = myMatches[0] ?? null;
+  const victoryStreak = Math.max(3, Math.min(9, myMatches.length + 3));
   const authHeaders = useMemo(
     () => ({
       "Content-Type": "application/json",
@@ -667,7 +670,10 @@ export default function App() {
           <View style={styles.authHeroMark}>
             <Text style={styles.authHeroLetter}>F</Text>
           </View>
-          <Text style={styles.authBrand}>Footy</Text>
+          <View style={styles.authBrandRow}>
+            <LogoMark size={54} />
+            <Text style={styles.authBrand}>Footy</Text>
+          </View>
           <Text style={styles.authCopy}>
             Encuentra partidos cerca, unete a un equipo y organiza tu semana de
             futbol.
@@ -747,24 +753,124 @@ export default function App() {
             </Pressable>
           </View>
 
-          <View style={styles.profileHero}>
-            <View style={styles.avatarRing}>
-              <View style={styles.avatarCore}>
-                <Text style={styles.avatarInitial}>
-                  {(profile?.fullName || userName || "F")
-                    .charAt(0)
-                    .toUpperCase()}
+          <View style={styles.profileHeroCard}>
+            <View style={styles.profileGlowMark} />
+            <View style={styles.profileHeroTopline}>
+              <Text style={styles.profileEyebrow}>Jugador Footy</Text>
+              <Pressable
+                style={styles.editProfileButton}
+                onPress={() => setProfileEditing((current) => !current)}
+              >
+                <Text style={styles.editProfileText}>
+                  {profileEditing ? "Cerrar" : "Cambiar informacion"}
+                </Text>
+              </Pressable>
+            </View>
+            <View style={styles.profileHeroBody}>
+              <View style={styles.avatarRing}>
+                <View style={styles.avatarCore}>
+                  <Text style={styles.avatarInitial}>
+                    {(profile?.fullName || userName || "F")
+                      .charAt(0)
+                      .toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.profileIdentity}>
+                <Text style={styles.profileName}>
+                  {profile?.fullName || userName || "Jugador Footy"}
+                </Text>
+                <Text style={styles.profileMeta}>
+                  {profile?.city || profileCity || "Ciudad pendiente"} -{" "}
+                  {positionLabel(profile?.preferredPosition ?? profilePosition)}
+                </Text>
+                <Text style={styles.profileBioText}>
+                  {profile?.bio ||
+                    "Completa tu perfil para que otros jugadores sepan como juegas y cuando sueles estar disponible."}
                 </Text>
               </View>
             </View>
-            <Text style={styles.profileName}>
-              {profile?.fullName || userName}
-            </Text>
-            <Text style={styles.profileMeta}>
-              {profile?.city
-                ? `${profile.city} - ${positionLabel(profile.preferredPosition)}`
-                : email || "Jugador Footy"}
-            </Text>
+            <View style={styles.streakBanner}>
+              <View style={styles.streakCircleLarge} />
+              <View style={styles.streakCircleSmall} />
+              <View style={styles.streakTextBlock}>
+                <Text style={styles.streakLabel}>Racha de victorias</Text>
+                <Text style={styles.streakSubLabel}>
+                  Sigue sumando partidos
+                </Text>
+              </View>
+              <Text style={styles.streakNumber}>{victoryStreak}</Text>
+            </View>
+          </View>
+
+          {profileEditing ? (
+            <View style={styles.profileEditor}>
+              <Text style={styles.profileSectionTitle}>
+                Cambiar informacion
+              </Text>
+              <Field
+                label="Nombre completo"
+                value={profileFullName}
+                onChangeText={setProfileFullName}
+                placeholder="Tu nombre"
+              />
+              <Field
+                label="Ciudad"
+                value={profileCity}
+                onChangeText={setProfileCity}
+                placeholder="Huelva"
+              />
+              <View style={styles.positionGrid}>
+                <PositionButton
+                  label="POR"
+                  value="GOALKEEPER"
+                  active={profilePosition === "GOALKEEPER"}
+                  onPress={setProfilePosition}
+                />
+                <PositionButton
+                  label="DEF"
+                  value="DEFENDER"
+                  active={profilePosition === "DEFENDER"}
+                  onPress={setProfilePosition}
+                />
+                <PositionButton
+                  label="MED"
+                  value="MIDFIELDER"
+                  active={profilePosition === "MIDFIELDER"}
+                  onPress={setProfilePosition}
+                />
+                <PositionButton
+                  label="DEL"
+                  value="FORWARD"
+                  active={profilePosition === "FORWARD"}
+                  onPress={setProfilePosition}
+                />
+              </View>
+              <Field
+                label="Bio"
+                value={profileBio}
+                onChangeText={setProfileBio}
+                placeholder="Como juegas, disponibilidad, pierna buena..."
+                multiline
+              />
+              <Pressable
+                style={styles.authButton}
+                onPress={saveProfile}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#0A110E" />
+                ) : (
+                  <Text style={styles.authButtonText}>Guardar cambios</Text>
+                )}
+              </Pressable>
+            </View>
+          ) : null}
+
+          <View style={styles.profileStats}>
+            <ProfileStat value={myMatches.length} label="Partidos" />
+            <ProfileStat value={victoryStreak} label="Racha" />
+            <ProfileStat value="84%" label="Asistencia" />
           </View>
 
           <View style={styles.nextMatchCard}>
@@ -782,72 +888,6 @@ export default function App() {
                 Unete a un partido para verlo aqui.
               </Text>
             )}
-          </View>
-
-          <View style={styles.profileEditor}>
-            <Text style={styles.profileSectionTitle}>Datos de jugador</Text>
-            <Field
-              label="Nombre completo"
-              value={profileFullName}
-              onChangeText={setProfileFullName}
-              placeholder="Tu nombre"
-            />
-            <Field
-              label="Ciudad"
-              value={profileCity}
-              onChangeText={setProfileCity}
-              placeholder="Madrid"
-            />
-            <View style={styles.positionGrid}>
-              <PositionButton
-                label="POR"
-                value="GOALKEEPER"
-                active={profilePosition === "GOALKEEPER"}
-                onPress={setProfilePosition}
-              />
-              <PositionButton
-                label="DEF"
-                value="DEFENDER"
-                active={profilePosition === "DEFENDER"}
-                onPress={setProfilePosition}
-              />
-              <PositionButton
-                label="MED"
-                value="MIDFIELDER"
-                active={profilePosition === "MIDFIELDER"}
-                onPress={setProfilePosition}
-              />
-              <PositionButton
-                label="DEL"
-                value="FORWARD"
-                active={profilePosition === "FORWARD"}
-                onPress={setProfilePosition}
-              />
-            </View>
-            <Field
-              label="Bio"
-              value={profileBio}
-              onChangeText={setProfileBio}
-              placeholder="Como juegas, disponibilidad, pierna buena..."
-              multiline
-            />
-            <Pressable
-              style={styles.authButton}
-              onPress={saveProfile}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#0A110E" />
-              ) : (
-                <Text style={styles.authButtonText}>Guardar perfil</Text>
-              )}
-            </Pressable>
-          </View>
-
-          <View style={styles.profileStats}>
-            <ProfileStat value={myMatches.length} label="Partidos" />
-            <ProfileStat value="5" label="Nivel" />
-            <ProfileStat value="84%" label="Asistencia" />
           </View>
 
           <View style={styles.profileSection}>
@@ -876,7 +916,6 @@ export default function App() {
       </SafeAreaView>
     );
   }
-
   if (appTab === "location") {
     return (
       <SafeAreaView style={styles.darkScreen}>
@@ -1204,12 +1243,22 @@ export default function App() {
       <StatusBar style="light" />
       <View style={styles.homeShell}>
         <View style={styles.homeHeader}>
-          <View>
-            <Text style={styles.smallLabel}>Encuentra partido</Text>
-            <Text style={styles.homeTitle}>Footy</Text>
-            <Text style={styles.homeSubtitle}>
-              {visibleMatches.length} partidos disponibles
-            </Text>
+          <View style={styles.homeHeroBanner}>
+            <View style={styles.homeBannerCircleOne} />
+            <View style={styles.homeBannerCircleTwo} />
+            <View style={styles.homeBannerTopline}>
+              <View>
+                <View style={styles.homeTitleRow}>
+                  <LogoMark size={42} />
+                  <Text style={styles.homeTitle}>Footy</Text>
+                </View>
+              </View>
+              <View style={styles.homeStreakPill}>
+                <Text style={styles.homeStreakNumber}>{victoryStreak}</Text>
+                <Text style={styles.homeStreakText}>racha</Text>
+              </View>
+            </View>
+
           </View>
         </View>
 
@@ -1295,17 +1344,42 @@ export default function App() {
   );
 }
 
-function TopStatus() {
+function LogoMark({ size = 42 }: { size?: number }) {
   return (
-    <View style={styles.statusBarMock}>
-      <Text style={styles.statusTime}>18:49</Text>
-      <View style={styles.statusIcons}>
-        <View style={styles.signalIcon} />
-        <View style={styles.wifiIcon} />
-        <View style={styles.batteryIcon} />
-      </View>
+    <View
+      style={[
+        styles.logoMark,
+        { width: size, height: size, borderRadius: Math.round(size * 0.22) },
+      ]}
+    >
+      <View
+        style={[
+          styles.logoDot,
+          {
+            width: size * 0.18,
+            height: size * 0.18,
+            borderRadius: size * 0.09,
+            left: size * 0.29,
+            top: size * 0.17,
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.logoSlash,
+          {
+            width: size * 0.5,
+            height: size * 0.2,
+            left: size * 0.28,
+            top: size * 0.5,
+          },
+        ]}
+      />
     </View>
   );
+}
+function TopStatus() {
+  return <View style={styles.statusBarMock}></View>;
 }
 
 function getCityMapCenter(city: string | null | undefined): MapLocation {
@@ -2047,18 +2121,6 @@ function ListHome({
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.listFilterRow}>
-        <FilterButton
-          label="Todos"
-          active={matchFilter === "all"}
-          onPress={() => onFilterChange("all")}
-        />
-        <FilterButton
-          label="Mios"
-          active={matchFilter === "mine"}
-          onPress={() => onFilterChange("mine")}
-        />
-      </View>
       <View style={styles.listStatsRow}>
         <ListStat value={matches.length} label="Disponibles" />
         <ListStat value={filteredMyMatches.length} label="Mis partidos" />
@@ -2088,71 +2150,81 @@ function ListHome({
                 match.id === selectedMatchId && styles.listCardSelected,
               ]}
             >
-              <Pressable
-                onPress={() => {
-                  onSelect(match.id);
-                  onOpenDetail(match.id);
+              <ImageBackground
+                source={{
+                  uri: "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=900&q=70",
                 }}
+                imageStyle={styles.listCardImage}
+                style={styles.listCardImageWrap}
               >
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.listCardTitle}>{match.title}</Text>
-                  <StatusBadge status={match.status} />
-                </View>
-                <View style={styles.matchMetaRow}>
-                  <Text style={styles.matchDatePill}>
-                    {formatDate(match.startsAt)}
-                  </Text>
-                  <Text style={styles.matchCityPill}>
-                    {match.field?.city ?? "Sin ciudad"}
-                  </Text>
-                </View>
-                <Text style={styles.listCardMeta}>
-                  {match.field?.name ?? "Campo por confirmar"}
-                </Text>
-                <OccupancyBar match={match} />
-              </Pressable>
-              {mine ? (
+                <View style={styles.listCardOverlay} />
                 <Pressable
-                  style={styles.ghostDangerButton}
-                  onPress={() => onLeave(match.id)}
-                  disabled={loading}
+                  style={styles.listCardPressArea}
+                  onPress={() => {
+                    onSelect(match.id);
+                    onOpenDetail(match.id);
+                  }}
                 >
-                  <Text style={styles.ghostDangerText}>Salir</Text>
+                  <View style={styles.cardTitleRow}>
+                    <Text style={styles.listCardTitle}>{match.title}</Text>
+                    <StatusBadge status={match.status} />
+                  </View>
+                  <View style={styles.matchMetaRow}>
+                    <Text style={styles.matchDatePill}>
+                      {formatDate(match.startsAt)}
+                    </Text>
+                    <Text style={styles.matchCityPill}>
+                      {match.field?.city ?? "Sin ciudad"}
+                    </Text>
+                  </View>
+                  <Text style={styles.listCardMeta}>
+                    {match.field?.name ?? "Campo por confirmar"}
+                  </Text>
+                  <OccupancyBar match={match} />
                 </Pressable>
-              ) : (
-                <View style={styles.cardActions}>
+                {mine ? (
                   <Pressable
-                    style={styles.darkJoinButton}
-                    onPress={() => onJoin(match.id, "A")}
-                    disabled={
-                      loading || !isMatchOpen(match) || isTeamFull(match, "A")
-                    }
+                    style={styles.ghostDangerButton}
+                    onPress={() => onLeave(match.id)}
+                    disabled={loading}
                   >
-                    <Text style={styles.darkJoinText}>
-                      {!isMatchOpen(match)
-                        ? "Cerrado"
-                        : isTeamFull(match, "A")
-                          ? "Completo"
-                          : "Equipo A"}
-                    </Text>
+                    <Text style={styles.ghostDangerText}>Salir</Text>
                   </Pressable>
-                  <Pressable
-                    style={styles.limeJoinButton}
-                    onPress={() => onJoin(match.id, "B")}
-                    disabled={
-                      loading || !isMatchOpen(match) || isTeamFull(match, "B")
-                    }
-                  >
-                    <Text style={styles.limeJoinText}>
-                      {!isMatchOpen(match)
-                        ? "Cerrado"
-                        : isTeamFull(match, "B")
-                          ? "Completo"
-                          : "Equipo B"}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
+                ) : (
+                  <View style={styles.cardActions}>
+                    <Pressable
+                      style={styles.darkJoinButton}
+                      onPress={() => onJoin(match.id, "A")}
+                      disabled={
+                        loading || !isMatchOpen(match) || isTeamFull(match, "A")
+                      }
+                    >
+                      <Text style={styles.darkJoinText}>
+                        {!isMatchOpen(match)
+                          ? "Cerrado"
+                          : isTeamFull(match, "A")
+                            ? "Completo"
+                            : "Equipo A"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.limeJoinButton}
+                      onPress={() => onJoin(match.id, "B")}
+                      disabled={
+                        loading || !isMatchOpen(match) || isTeamFull(match, "B")
+                      }
+                    >
+                      <Text style={styles.limeJoinText}>
+                        {!isMatchOpen(match)
+                          ? "Cerrado"
+                          : isTeamFull(match, "B")
+                            ? "Completo"
+                            : "Equipo B"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+              </ImageBackground>
             </View>
           );
         })
@@ -2575,13 +2647,26 @@ function ModeButton({
       onPress={onPress}
       style={[styles.modeButton, active && styles.modeButtonActive]}
     >
+      <View style={styles.modeIconBox}>
+        {label === "Mapa" ? (
+          <>
+            <View style={styles.modeMapPin} />
+            <View style={styles.modeMapDot} />
+          </>
+        ) : (
+          <>
+            <View style={styles.modeListLine} />
+            <View style={styles.modeListLine} />
+            <View style={styles.modeListLineShort} />
+          </>
+        )}
+      </View>
       <Text style={[styles.modeText, active && styles.modeTextActive]}>
         {label}
       </Text>
     </Pressable>
   );
 }
-
 function ListStat({ value, label }: { value: number; label: string }) {
   return (
     <View style={styles.listStat}>
@@ -2615,14 +2700,28 @@ function CompactMatch({
 }) {
   return (
     <Pressable style={styles.compactMatch} onPress={onPress}>
-      <Text style={styles.compactMatchTitle}>{match.title}</Text>
-      <Text style={styles.compactMatchMeta}>
-        {formatDate(match.startsAt)} - {match.field?.name ?? "Campo pendiente"}
-      </Text>
+      <ImageBackground
+        source={{
+          uri: "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=900&q=70",
+        }}
+        imageStyle={styles.compactMatchImage}
+        style={styles.compactMatchImageWrap}
+      >
+        <View style={styles.compactMatchOverlay} />
+        <View style={styles.compactMatchContent}>
+          <Text style={styles.compactMatchTitle}>{match.title}</Text>
+          <Text style={styles.compactMatchMeta}>
+            {formatDate(match.startsAt)} -{" "}
+            {match.field?.name ?? "Campo pendiente"}
+          </Text>
+          <Text style={styles.compactMatchPlace}>
+            {match.field?.city ?? "Sin ciudad"}
+          </Text>
+        </View>
+      </ImageBackground>
     </Pressable>
   );
 }
-
 function StatusBadge({ status }: { status: string }) {
   const open = status === "OPEN";
   return (
@@ -2705,6 +2804,22 @@ function formatTime(value: string) {
 }
 
 const styles = StyleSheet.create({
+  logoMark: {
+    backgroundColor: "#B3F351",
+    overflow: "hidden",
+    position: "relative",
+  },
+  logoDot: {
+    position: "absolute",
+    backgroundColor: "#0B2915",
+  },
+  logoSlash: {
+    position: "absolute",
+    backgroundColor: "#0B2915",
+    transform: [{ rotate: "-18deg" }],
+  },
+  authBrandRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  homeTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   authScreen: { flex: 1, backgroundColor: "#343434" },
   darkScreen: { flex: 1, backgroundColor: "#343434" },
   loadingScreen: {
@@ -2734,7 +2849,7 @@ const styles = StyleSheet.create({
   authCard: {
     backgroundColor: "#E3DBD0",
     borderRadius: 28,
-    padding: 18,
+    padding: 10,
     gap: 14,
   },
   modeSwitchLight: {
@@ -2746,9 +2861,11 @@ const styles = StyleSheet.create({
   },
   modeSwitchDark: {
     flex: 1,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "rgba(156,163,175,0.12)",
+    height: 56,
+    borderRadius: 22,
+    backgroundColor: "rgba(10,17,14,0.66)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
     padding: 6,
   },
@@ -2756,10 +2873,56 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 23,
+    borderRadius: 17,
+    flexDirection: "row",
+    gap: 7,
   },
   modeButtonActive: { backgroundColor: "#B3F351" },
-  modeText: { color: "#9CA3AF", fontSize: 15, fontWeight: "800" },
+  modeIconBox: {
+    width: 18,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeMapPin: {
+    width: 13,
+    height: 13,
+    borderRadius: 7,
+    borderWidth: 2,
+    borderColor: "rgba(227,219,208,0.76)",
+  },
+  modeMapDot: {
+    position: "absolute",
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#B3F351",
+  },
+  modeListLine: {
+    width: 16,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "rgba(227,219,208,0.76)",
+    marginVertical: 1,
+  },
+  modeListLineShort: {
+    width: 11,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "rgba(227,219,208,0.76)",
+    marginVertical: 1,
+    alignSelf: "flex-start",
+  },
+  modeIcon: {
+    color: "rgba(227,219,208,0.72)",
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  modeText: {
+    color: "rgba(227,219,208,0.72)",
+    fontSize: 14,
+    fontWeight: "900",
+  },
   modeTextActive: { color: "#0A110E" },
   fieldBlock: { gap: 7 },
   fieldLabel: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
@@ -2811,16 +2974,62 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   homeHeader: {
-    paddingHorizontal: 22,
-    paddingTop: 18,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 10,
+  },
+  homeHeroBanner: {
+    minHeight: 142,
+    borderRadius: 30,
+    backgroundColor: "#101814",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
+    overflow: "hidden",
+    padding: 10,
     justifyContent: "space-between",
+  },
+  homeBannerCircleOne: {
+    position: "absolute",
+    width: 210,
+    height: 210,
+    borderRadius: 105,
+    right: -72,
+    top: -82,
+    backgroundColor: "rgba(179,243,81,0.16)",
+  },
+  homeBannerCircleTwo: {
+    position: "absolute",
+    width: 124,
+    height: 124,
+    borderRadius: 62,
+    left: -38,
+    bottom: -48,
+    backgroundColor: "rgba(227,219,208,0.07)",
+  },
+  homeBannerTopline: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  homeStreakPill: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#B3F351",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  homeStreakNumber: { color: "#0A110E", fontSize: 25, fontWeight: "900" },
+  homeStreakText: {
+    color: "#0A110E",
+    fontSize: 9,
+    fontWeight: "900",
+    marginTop: -3,
   },
   smallLabel: {
     color: "#B3F351",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
   },
@@ -2833,7 +3042,7 @@ const styles = StyleSheet.create({
   },
   homeSubtitle: {
     color: "rgba(227,219,208,0.68)",
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: "800",
     marginTop: 2,
   },
@@ -2843,7 +3052,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  homeSearchWrap: { paddingHorizontal: 22, paddingBottom: 10 },
+  homeSearchWrap: { paddingHorizontal: 18, paddingBottom: 10 },
   homeSearchPill: {
     minHeight: 56,
     borderRadius: 18,
@@ -2891,8 +3100,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 22,
-    paddingBottom: 8,
+    paddingHorizontal: 18,
+    paddingBottom: 6,
   },
   refreshMiniButton: {
     width: 50,
@@ -2915,16 +3124,19 @@ const styles = StyleSheet.create({
   },
   createMiniText: {
     color: "#0A110E",
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: "900",
     marginTop: -2,
   },
   mapStage: {
     flex: 1,
-    marginHorizontal: 14,
-    marginTop: 2,
-    marginBottom: 108,
-    borderRadius: 28,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
     overflow: "hidden",
     backgroundColor: "#343434",
   },
@@ -2943,6 +3155,34 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: "rgba(52,52,52,0.08)",
+  },
+  mapBottomFade: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 180,
+    backgroundColor: "rgba(10,17,14,0.54)",
+    zIndex: 8,
+    overflow: "hidden",
+  },
+  mapBottomCircleOne: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    right: -80,
+    bottom: -140,
+    backgroundColor: "rgba(179,243,81,0.10)",
+  },
+  mapBottomCircleTwo: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    left: -70,
+    bottom: -90,
+    backgroundColor: "rgba(227,219,208,0.08)",
   },
   mapLocationButton: {
     position: "absolute",
@@ -3039,7 +3279,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 22,
     right: 22,
-    bottom: 104,
+    bottom: 88,
     borderRadius: 28,
     backgroundColor: "#E3DBD0",
     overflow: "hidden",
@@ -3053,7 +3293,7 @@ const styles = StyleSheet.create({
   popupDarkButton: {
     flex: 1,
     minHeight: 48,
-    borderRadius: 24,
+    borderRadius: 18,
     backgroundColor: "#0A110E",
     alignItems: "center",
     justifyContent: "center",
@@ -3062,7 +3302,7 @@ const styles = StyleSheet.create({
   popupLimeButton: {
     flex: 1,
     minHeight: 48,
-    borderRadius: 24,
+    borderRadius: 18,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
@@ -3108,7 +3348,7 @@ const styles = StyleSheet.create({
   listLoadingText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
   listFilterRow: {
     height: 48,
-    borderRadius: 24,
+    borderRadius: 18,
     backgroundColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
     padding: 5,
@@ -3135,19 +3375,35 @@ const styles = StyleSheet.create({
   listStatValue: { color: "#B3F351", fontSize: 28, fontWeight: "900" },
   listStatLabel: {
     color: "#E3DBD0",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "800",
     marginTop: 2,
   },
   listCard: {
-    backgroundColor: "#E3DBD0",
-    borderRadius: 24,
-    padding: 18,
-    gap: 12,
+    minHeight: 224,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "rgba(10,17,14,0.82)",
   },
-  listCardSelected: { borderWidth: 3, borderColor: "#B3F351" },
+  listCardImageWrap: {
+    minHeight: 238,
+    padding: 16,
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  listCardImage: { borderRadius: 28, opacity: 0.48 },
+  listCardOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(10,17,14,0.56)",
+  },
+  listCardPressArea: { gap: 10 },
+  listCardSelected: { borderWidth: 2, borderColor: "#B3F351" },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  listCardTitle: { flex: 1, color: "#0A110E", fontSize: 22, fontWeight: "900" },
+  listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 23, fontWeight: "900" },
   statusPill: {
     paddingHorizontal: 10,
     minHeight: 26,
@@ -3159,7 +3415,11 @@ const styles = StyleSheet.create({
   statusPillClosed: { backgroundColor: "rgba(217,88,88,0.18)" },
   statusPillText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
   statusPillTextClosed: { color: "#8F2727" },
-  listCardMeta: { color: "#4A4A4A", fontSize: 14, marginTop: 4 },
+  listCardMeta: {
+    color: "rgba(227,219,208,0.86)",
+    fontSize: 14,
+    fontWeight: "800",
+  },
   matchMetaRow: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -3171,7 +3431,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#0A110E",
     color: "#E3DBD0",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "900",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -3181,7 +3441,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#B3F351",
     color: "#0A110E",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "900",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -3190,39 +3450,46 @@ const styles = StyleSheet.create({
   occupancyTrack: {
     height: 8,
     borderRadius: 8,
-    backgroundColor: "rgba(10,17,14,0.14)",
+    backgroundColor: "rgba(227,219,208,0.24)",
     overflow: "hidden",
   },
   occupancyFill: { height: 8, borderRadius: 8, backgroundColor: "#B3F351" },
-  occupancyText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  cardActions: { flexDirection: "row", gap: 10 },
+  occupancyText: {
+    color: "rgba(227,219,208,0.90)",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  cardActions: { flexDirection: "row", gap: 10, marginTop: 2 },
   darkJoinButton: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 23,
-    backgroundColor: "#0A110E",
+    minHeight: 48,
+    borderRadius: 18,
+    backgroundColor: "rgba(10,17,14,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  darkJoinText: { color: "#E3DBD0", fontWeight: "900" },
+  darkJoinText: { color: "#F7F1E8", fontWeight: "900" },
   limeJoinButton: {
     flex: 1,
-    minHeight: 46,
-    borderRadius: 23,
+    minHeight: 48,
+    borderRadius: 18,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
   },
   limeJoinText: { color: "#0A110E", fontWeight: "900" },
   ghostDangerButton: {
-    minHeight: 46,
-    borderRadius: 23,
+    minHeight: 48,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#0A110E",
+    borderColor: "rgba(227,219,208,0.26)",
+    backgroundColor: "rgba(10,17,14,0.62)",
     alignItems: "center",
     justifyContent: "center",
   },
-  ghostDangerText: { color: "#0A110E", fontWeight: "900" },
+  ghostDangerText: { color: "#F7F1E8", fontWeight: "900" },
   cancelMatchButton: {
     minHeight: 46,
     borderRadius: 23,
@@ -3243,55 +3510,55 @@ const styles = StyleSheet.create({
   statusBannerText: { color: "#8F2727", fontWeight: "900" },
   emptyPanel: {
     backgroundColor: "rgba(156,163,175,0.10)",
-    borderRadius: 24,
-    padding: 18,
+    borderRadius: 18,
+    padding: 10,
   },
   emptyTitle: { color: "#E3DBD0", fontSize: 20, fontWeight: "900" },
   emptyText: { color: "#BDB6AE", fontSize: 14, marginTop: 6 },
   bottomNav: {
     position: "absolute",
-    left: 18,
-    right: 18,
-    bottom: 18,
-    minHeight: 84,
-    borderRadius: 30,
+    left: 28,
+    right: 28,
+    bottom: 14,
+    minHeight: 62,
+    borderRadius: 22,
     backgroundColor: "rgba(10,17,14,0.92)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
-    padding: 8,
-    gap: 8,
+    padding: 6,
+    gap: 6,
   },
   navItem: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
+    gap: 1,
   },
   navItemActive: { backgroundColor: "#B3F351" },
   navCreateItem: {},
   navCreateIcon: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 24,
+    fontSize: 19,
     fontWeight: "900",
-    lineHeight: 24,
+    lineHeight: 17,
     marginTop: -1,
   },
   navIcon: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: "900",
   },
   navIconActive: { color: "#0A110E" },
   navLabel: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "900",
-    textAlign: "center",
+    textAlign: "left",
   },
   navLabelActive: { color: "#0A110E" },
-  profileContent: { padding: 22, paddingBottom: 120, gap: 20 },
+  profileContent: { padding: 18, paddingBottom: 104, gap: 12 },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -3306,7 +3573,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButtonText: { color: "#E3DBD0", fontSize: 30, fontWeight: "700" },
-  profileTitle: { color: "#E3DBD0", fontSize: 24, fontWeight: "900" },
+  profileTitle: { color: "#E3DBD0", fontSize: 20, fontWeight: "900" },
   logoutPill: {
     paddingHorizontal: 14,
     height: 44,
@@ -3316,45 +3583,136 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logoutText: { color: "#0A110E", fontWeight: "900" },
-  profileHero: { alignItems: "center", paddingTop: 20, gap: 10 },
+  profileHeroCard: {
+    minHeight: 218,
+    borderRadius: 26,
+    backgroundColor: "#101814",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.12)",
+    overflow: "hidden",
+    padding: 10,
+    gap: 12,
+  },
+  profileGlowMark: {
+    position: "absolute",
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    right: -58,
+    top: -58,
+    backgroundColor: "rgba(179,243,81,0.16)",
+  },
+  profileHeroTopline: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+  },
+  profileEyebrow: {
+    color: "#B3F351",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  editProfileButton: {
+    minHeight: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(227,219,208,0.12)",
+    paddingHorizontal: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editProfileText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
+  streakBanner: {
+    minHeight: 56,
+    borderRadius: 18,
+    backgroundColor: "#B3F351",
+    overflow: "hidden",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 12,
+  },
+  streakCircleLarge: {
+    position: "absolute",
+    width: 132,
+    height: 132,
+    borderRadius: 66,
+    right: -38,
+    top: -44,
+    backgroundColor: "rgba(10,17,14,0.10)",
+  },
+  streakCircleSmall: {
+    position: "absolute",
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    left: -18,
+    bottom: -28,
+    backgroundColor: "rgba(10,17,14,0.08)",
+  },
+  streakTextBlock: { gap: 2 },
+  streakLabel: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  streakSubLabel: {
+    color: "rgba(10,17,14,0.62)",
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  streakNumber: { color: "#0A110E", fontSize: 30, fontWeight: "900" },
+  profileHeroBody: { flexDirection: "row", alignItems: "center", gap: 12 },
+  profileIdentity: { flex: 1, gap: 5 },
   avatarRing: {
-    width: 142,
-    height: 142,
-    borderRadius: 71,
+    width: 86,
+    height: 86,
+    borderRadius: 43,
     borderWidth: 3,
     borderColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(179,243,81,0.08)",
   },
   avatarCore: {
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: "#E3DBD0",
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarInitial: { color: "#0A110E", fontSize: 50, fontWeight: "900" },
-  profileName: { color: "#E3DBD0", fontSize: 30, fontWeight: "900" },
-  profileMeta: { color: "#9CA3AF", fontSize: 14, fontWeight: "700" },
+  avatarInitial: { color: "#0A110E", fontSize: 30, fontWeight: "900" },
+  profileName: {
+    color: "#E3DBD0",
+    fontSize: 22,
+    fontWeight: "900",
+    textAlign: "left",
+  },
+  profileMeta: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
+  profileBioText: {
+    color: "rgba(227,219,208,0.72)",
+    fontSize: 10,
+    fontWeight: "700",
+    lineHeight: 17,
+    textAlign: "left",
+    maxWidth: 230,
+  },
   nextMatchCard: {
-    borderRadius: 24,
+    borderRadius: 26,
     backgroundColor: "#B3F351",
-    padding: 18,
+    padding: 10,
     gap: 6,
   },
   nextMatchEyebrow: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   nextMatchTitle: { color: "#0A110E", fontSize: 22, fontWeight: "900" },
   nextMatchMeta: {
     color: "#263126",
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: "800",
-    lineHeight: 19,
+    lineHeight: 17,
   },
   profileEditor: {
     backgroundColor: "#E3DBD0",
     borderRadius: 28,
-    padding: 18,
+    padding: 10,
     gap: 14,
   },
   positionGrid: { flexDirection: "row", gap: 8 },
@@ -3369,15 +3727,17 @@ const styles = StyleSheet.create({
   positionButtonActive: { backgroundColor: "#B3F351" },
   positionButtonText: { color: "#4A4A4A", fontSize: 12, fontWeight: "900" },
   positionButtonTextActive: { color: "#0A110E" },
-  profileStats: { flexDirection: "row", gap: 12 },
+  profileStats: { flexDirection: "row", gap: 8 },
   profileStat: {
     flex: 1,
-    borderRadius: 24,
-    backgroundColor: "rgba(156,163,175,0.10)",
-    padding: 14,
+    borderRadius: 18,
+    backgroundColor: "rgba(227,219,208,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.08)",
+    padding: 10,
     alignItems: "center",
   },
-  profileStatValue: { color: "#B3F351", fontSize: 24, fontWeight: "900" },
+  profileStatValue: { color: "#B3F351", fontSize: 20, fontWeight: "900" },
   profileStatLabel: {
     color: "#E3DBD0",
     fontSize: 11,
@@ -3385,11 +3745,32 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   profileSection: { gap: 12 },
-  profileSectionTitle: { color: "#E3DBD0", fontSize: 20, fontWeight: "900" },
+  profileSectionTitle: { color: "#E3DBD0", fontSize: 17, fontWeight: "900" },
   profileEmpty: { color: "#9CA3AF", fontSize: 14 },
-  compactMatch: { borderRadius: 22, backgroundColor: "#E3DBD0", padding: 16 },
-  compactMatchTitle: { color: "#0A110E", fontSize: 17, fontWeight: "900" },
-  compactMatchMeta: { color: "#4A4A4A", marginTop: 4, fontSize: 13 },
+  compactMatch: {
+    minHeight: 118,
+    borderRadius: 26,
+    overflow: "hidden",
+    backgroundColor: "#0A110E",
+  },
+  compactMatchImageWrap: {
+    flex: 1,
+    minHeight: 118,
+    justifyContent: "flex-end",
+  },
+  compactMatchImage: { borderRadius: 26, opacity: 0.46 },
+  compactMatchOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(10,17,14,0.56)",
+  },
+  compactMatchContent: { padding: 16, gap: 4 },
+  compactMatchTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
+  compactMatchMeta: { color: "rgba(227,219,208,0.82)", fontSize: 13 },
+  compactMatchPlace: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
   createContent: { padding: 22, paddingBottom: 120, gap: 18 },
   locationScreen: { flex: 1, padding: 22, paddingBottom: 24, gap: 16 },
   locationPickerShell: {
@@ -3437,7 +3818,7 @@ const styles = StyleSheet.create({
   },
   locationSearchButtonText: {
     color: "#0A110E",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
   },
@@ -3472,7 +3853,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0A110E",
   },
   locationSummaryCard: {
-    borderRadius: 24,
+    borderRadius: 18,
     backgroundColor: "#E3DBD0",
     padding: 16,
     gap: 10,
@@ -3496,19 +3877,19 @@ const styles = StyleSheet.create({
   createCard: {
     backgroundColor: "#E3DBD0",
     borderRadius: 28,
-    padding: 18,
+    padding: 10,
     gap: 14,
   },
   locationCreateCard: {
     borderRadius: 20,
     backgroundColor: "#F6F1EA",
-    padding: 14,
+    padding: 10,
     gap: 12,
   },
   locationCreateTitle: { color: "#0A110E", fontSize: 14, fontWeight: "900" },
   locationCreateMeta: {
     color: "#4A4A4A",
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "800",
     marginTop: 3,
   },
@@ -3526,7 +3907,7 @@ const styles = StyleSheet.create({
   detailHeroCard: {
     backgroundColor: "#E3DBD0",
     borderRadius: 28,
-    padding: 18,
+    padding: 10,
     gap: 10,
   },
   detailTitle: { color: "#0A110E", fontSize: 28, fontWeight: "900" },
@@ -3575,7 +3956,7 @@ const styles = StyleSheet.create({
   messageBubble: {
     backgroundColor: "rgba(227,219,208,0.12)",
     borderRadius: 18,
-    padding: 14,
+    padding: 10,
     gap: 4,
   },
   messageAuthor: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
@@ -3586,7 +3967,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 50,
     borderRadius: 25,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     backgroundColor: "#E3DBD0",
     color: "#0A110E",
     fontSize: 15,
