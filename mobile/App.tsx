@@ -4,11 +4,14 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  PanResponder,
   Platform,
   Pressable,
   SafeAreaView,
@@ -22,9 +25,13 @@ import {
 type AuthMode = "login" | "register";
 type HomeMode = "map" | "list";
 type MatchFilter = "all" | "mine";
-type AppTab = "home" | "create" | "detail" | "profile";
+type AppTab = "home" | "create" | "detail" | "profile" | "location";
 type TeamSide = "A" | "B";
 type PlayerPosition = "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD";
+type MapLocation = { latitude: number; longitude: number };
+type MapPoint = { x: number; y: number };
+type MapTile = { key: string; x: number; y: number; uri: string };
+type GeocodeResult = { lat: string; lon: string; display_name: string };
 
 type AuthResponse = {
   accessToken: string;
@@ -65,6 +72,8 @@ type MatchResponse = {
     name: string;
     address: string | null;
     city: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
   };
   occupancy: {
     teamAPlayers: number;
@@ -145,15 +154,25 @@ const sessionStorageAdapter = {
 };
 
 const markerPositions = [
-  { left: "20%", top: "33%" },
-  { left: "74%", top: "26%" },
-  { left: "36%", top: "58%" },
-  { left: "78%", top: "78%" },
-  { left: "50%", top: "45%" },
-  { left: "17%", top: "72%" },
-  { left: "63%", top: "63%" },
-  { left: "86%", top: "48%" },
+  { left: 20, top: 33 },
+  { left: 74, top: 26 },
+  { left: 36, top: 58 },
+  { left: 78, top: 78 },
+  { left: 50, top: 45 },
+  { left: 17, top: 72 },
+  { left: 63, top: 63 },
+  { left: 86, top: 48 },
 ] as const;
+
+const FOOTY_MAP_WIDTH = 6000;
+const FOOTY_MAP_HEIGHT = 6000;
+const FOOTY_MAP_PADDING = 120;
+const MARKER_SIZE = 64;
+const MAP_TILE_SIZE = 256;
+const MAP_DEFAULT_ZOOM = 13;
+const MAP_MIN_ZOOM = 11;
+const MAP_MAX_ZOOM = 17;
+const DEFAULT_MAP_CENTER = { latitude: 37.26142, longitude: -6.94472 };
 
 function tomorrowDateParts() {
   const date = new Date();
@@ -192,12 +211,16 @@ export default function App() {
     useState<PlayerPosition>("MIDFIELDER");
 
   const [newTitle, setNewTitle] = useState("Partido Footy");
-  const [newFieldName, setNewFieldName] = useState("Campo Municipal Norte");
-  const [newAddress, setNewAddress] = useState("Calle del Deporte 12");
-  const [newCity, setNewCity] = useState("Madrid");
+  const [newFieldName, setNewFieldName] = useState("Campo Municipal Saladillo");
+  const [newAddress, setNewAddress] = useState(
+    "Calle Hermanos Alvarez Quintero 13",
+  );
+  const [newCity, setNewCity] = useState("Huelva");
   const [newDate, setNewDate] = useState(tomorrowDateParts());
   const [newTime, setNewTime] = useState("19:00");
   const [newMaxPlayers, setNewMaxPlayers] = useState("5");
+  const [newLatitude, setNewLatitude] = useState(37.26142);
+  const [newLongitude, setNewLongitude] = useState(-6.94472);
 
   const isLoggedIn = Boolean(token);
   const visibleMatches = useMemo(() => {
@@ -214,11 +237,9 @@ export default function App() {
     });
   }, [matches, searchQuery]);
 
-  const selectedMatch =
-    matches.find((match) => match.id === selectedMatchId) ??
-    visibleMatches[0] ??
-    matches[0] ??
-    null;
+  const selectedMatch = selectedMatchId
+    ? (matches.find((match) => match.id === selectedMatchId) ?? null)
+    : null;
   const selectedIsMine = selectedMatch
     ? myMatches.some((match) => match.id === selectedMatch.id)
     : false;
@@ -231,6 +252,7 @@ export default function App() {
     selectedMatch && currentUserId === selectedMatch.createdBy.id,
   );
   const selectedIsOpen = selectedMatch?.status === "OPEN";
+  const nextMyMatch = myMatches[0] ?? null;
   const authHeaders = useMemo(
     () => ({
       "Content-Type": "application/json",
@@ -281,8 +303,30 @@ export default function App() {
     ]);
     setMatches(available);
     setMyMatches(mine);
-    setSelectedMatchId((current) => current ?? available[0]?.id ?? null);
+    setSelectedMatchId((current) =>
+      current && available.some((match) => match.id === current)
+        ? current
+        : null,
+    );
   }, [request, token]);
+
+  async function refreshMatches() {
+    setLoading(true);
+    try {
+      await loadMatches();
+      setNotice("Partidos actualizados");
+    } catch (error) {
+      setNotice("No se pudo actualizar");
+      Alert.alert(
+        "No se pudo actualizar",
+        error instanceof Error
+          ? error.message
+          : "Revisa que el backend este arrancado.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     const storedSession = sessionStorageAdapter.get();
@@ -438,7 +482,7 @@ export default function App() {
       ]);
       setMatches(available);
       setMyMatches(mine);
-      setSelectedMatchId(available[0]?.id ?? null);
+      setSelectedMatchId(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Error inesperado";
@@ -481,8 +525,8 @@ export default function App() {
             name: newFieldName.trim(),
             address: newAddress.trim() || null,
             city: newCity.trim() || null,
-            latitude: 40.416775,
-            longitude: -3.70379,
+            latitude: newLatitude,
+            longitude: newLongitude,
           },
         }),
       });
@@ -598,7 +642,7 @@ export default function App() {
     setMyMatches([]);
     setMessages([]);
     setProfile(null);
-    setSelectedMatchId(matches[0]?.id ?? null);
+    setSelectedMatchId(null);
     setNotice("Sesion cerrada");
   }
 
@@ -699,7 +743,7 @@ export default function App() {
             >
               <Text style={styles.backButtonText}>{"<"}</Text>
             </Pressable>
-            <Text style={styles.profileTitle}>Profile</Text>
+            <Text style={styles.profileTitle}>Perfil</Text>
             <Pressable style={styles.logoutPill} onPress={logout}>
               <Text style={styles.logoutText}>Salir</Text>
             </Pressable>
@@ -723,6 +767,23 @@ export default function App() {
                 ? `${profile.city} - ${positionLabel(profile.preferredPosition)}`
                 : email || "Jugador Footy"}
             </Text>
+          </View>
+
+          <View style={styles.nextMatchCard}>
+            <Text style={styles.nextMatchEyebrow}>Proximo partido</Text>
+            {nextMyMatch ? (
+              <Pressable onPress={() => openDetail(nextMyMatch.id)}>
+                <Text style={styles.nextMatchTitle}>{nextMyMatch.title}</Text>
+                <Text style={styles.nextMatchMeta}>
+                  {formatDate(nextMyMatch.startsAt)} -{" "}
+                  {nextMyMatch.field?.name ?? "Campo pendiente"}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.nextMatchMeta}>
+                Unete a un partido para verlo aqui.
+              </Text>
+            )}
           </View>
 
           <View style={styles.profileEditor}>
@@ -818,6 +879,55 @@ export default function App() {
     );
   }
 
+  if (appTab === "location") {
+    return (
+      <SafeAreaView style={styles.darkScreen}>
+        <StatusBar style="light" />
+        <View style={styles.locationScreen}>
+          <TopStatus />
+          <View style={styles.screenHeader}>
+            <View>
+              <Text style={styles.smallLabel}>Ubicacion del partido</Text>
+              <Text style={styles.screenTitle}>Mapa</Text>
+            </View>
+            <Pressable
+              style={styles.closePill}
+              onPress={() => setAppTab("create")}
+            >
+              <Text style={styles.closePillText}>Volver</Text>
+            </Pressable>
+          </View>
+          <View style={styles.locationPickerShell}>
+            <LocationPickerMap
+              value={{ latitude: newLatitude, longitude: newLongitude }}
+              city={profile?.city || profileCity || newCity || "Huelva"}
+              fieldName={newFieldName}
+              onChange={(location, address) => {
+                setNewLatitude(location.latitude);
+                setNewLongitude(location.longitude);
+                if (address) {
+                  setNewAddress(address);
+                }
+                setNewCity(profile?.city || profileCity || newCity || "Huelva");
+              }}
+            />
+          </View>
+          <View style={styles.locationSummaryCard}>
+            <Text style={styles.locationSummaryTitle}>Punto seleccionado</Text>
+            <Text style={styles.locationSummaryText}>
+              {newLatitude.toFixed(5)}, {newLongitude.toFixed(5)}
+            </Text>
+            <Pressable
+              style={styles.authButton}
+              onPress={() => setAppTab("create")}
+            >
+              <Text style={styles.authButtonText}>Usar esta ubicacion</Text>
+            </Pressable>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
   if (appTab === "create") {
     return (
       <SafeAreaView style={styles.darkScreen}>
@@ -853,18 +963,21 @@ export default function App() {
               onChangeText={setNewFieldName}
               placeholder="Nombre del campo"
             />
-            <Field
-              label="Direccion"
-              value={newAddress}
-              onChangeText={setNewAddress}
-              placeholder="Calle, numero"
-            />
-            <Field
-              label="Ciudad"
-              value={newCity}
-              onChangeText={setNewCity}
-              placeholder="Madrid"
-            />
+            <View style={styles.locationCreateCard}>
+              <View>
+                <Text style={styles.locationCreateTitle}>Ubicacion</Text>
+                <Text style={styles.locationCreateMeta}>
+                  {newLatitude.toFixed(5)}, {newLongitude.toFixed(5)}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.locationPickButton}
+                onPress={() => setAppTab("location")}
+              >
+                <Text style={styles.locationPickText}>Elegir en mapa</Text>
+              </Pressable>
+            </View>
+
             <View style={styles.formRow}>
               <View style={styles.formHalf}>
                 <Field
@@ -1092,20 +1205,30 @@ export default function App() {
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
       <View style={styles.homeShell}>
-        <TopStatus />
         <View style={styles.homeHeader}>
           <View>
-            <Text style={styles.smallLabel}>Find your next game</Text>
+            <Text style={styles.smallLabel}>Encuentra partido</Text>
             <Text style={styles.homeTitle}>Footy</Text>
-          </View>
-          <Pressable
-            style={styles.profileShortcut}
-            onPress={() => setAppTab("profile")}
-          >
-            <Text style={styles.profileShortcutText}>
-              {(userName ?? "F").charAt(0).toUpperCase()}
+            <Text style={styles.homeSubtitle}>
+              {visibleMatches.length} partidos disponibles
             </Text>
-          </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.homeSearchWrap}>
+          <View style={styles.homeSearchPill}>
+            <View style={styles.homeSearchIcon}>
+              <View style={styles.homeSearchCircle} />
+              <View style={styles.homeSearchHandle} />
+            </View>
+            <TextInput
+              style={styles.homeSearchInput}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Buscar partido o ciudad"
+              placeholderTextColor="rgba(227,219,208,0.62)"
+            />
+          </View>
         </View>
 
         <View style={styles.homeToolbar}>
@@ -1122,10 +1245,15 @@ export default function App() {
             />
           </View>
           <Pressable
-            style={styles.createMiniButton}
-            onPress={() => setAppTab("create")}
+            style={styles.refreshMiniButton}
+            onPress={refreshMatches}
+            disabled={loading}
           >
-            <Text style={styles.createMiniText}>+</Text>
+            {loading ? (
+              <ActivityIndicator color="#E3DBD0" />
+            ) : (
+              <Text style={styles.refreshMiniText}>R</Text>
+            )}
           </Pressable>
         </View>
 
@@ -1134,7 +1262,10 @@ export default function App() {
             matches={visibleMatches}
             selectedMatch={selectedMatch}
             selectedMatchId={selectedMatchId}
+            searchQuery={searchQuery}
+            userCity={profile?.city || profileCity || "Huelva"}
             onSelect={setSelectedMatchId}
+            onClearSelection={() => setSelectedMatchId(null)}
             onOpenDetail={openDetail}
             onJoin={joinMatch}
             loading={loading}
@@ -1146,7 +1277,6 @@ export default function App() {
             currentUserId={currentUserId}
             matchFilter={matchFilter}
             searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
             onFilterChange={setMatchFilter}
             selectedMatchId={selectedMatchId}
             onSelect={setSelectedMatchId}
@@ -1180,11 +1310,165 @@ function TopStatus() {
   );
 }
 
+function getCityMapCenter(city: string | null | undefined): MapLocation {
+  const normalized = (city ?? "").trim().toLowerCase();
+  if (normalized.includes("huelva")) {
+    return { latitude: 37.26142, longitude: -6.94472 };
+  }
+  if (normalized.includes("madrid")) {
+    return { latitude: 40.416775, longitude: -3.70379 };
+  }
+  return DEFAULT_MAP_CENTER;
+}
+
+async function geocodePlace(query: string, city?: string) {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) {
+    return null;
+  }
+
+  const scopedQuery = city?.trim()
+    ? `${normalizedQuery}, ${city.trim()}, Espana`
+    : `${normalizedQuery}, Espana`;
+  const response = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=es&q=${encodeURIComponent(scopedQuery)}`,
+  );
+  if (!response.ok) {
+    throw new Error("No se pudo buscar la direccion");
+  }
+
+  const results = (await response.json()) as GeocodeResult[];
+  const first = results[0];
+  if (!first) {
+    return null;
+  }
+
+  return {
+    location: {
+      latitude: Number(first.lat),
+      longitude: Number(first.lon),
+    },
+    address: first.display_name,
+  };
+}
+function getMatchLocation(match: MatchResponse) {
+  const latitude = match.field?.latitude;
+  const longitude = match.field?.longitude;
+  if (typeof latitude === "number" && typeof longitude === "number") {
+    return { latitude, longitude };
+  }
+  return null;
+}
+
+function getMapCenter(
+  matches: MatchResponse[],
+  userLocation: MapLocation | null,
+): MapLocation {
+  if (userLocation) {
+    return userLocation;
+  }
+
+  const locations = matches
+    .map(getMatchLocation)
+    .filter(Boolean) as MapLocation[];
+  if (locations.length === 0) {
+    return DEFAULT_MAP_CENTER;
+  }
+
+  return {
+    latitude:
+      locations.reduce((sum, location) => sum + location.latitude, 0) /
+      locations.length,
+    longitude:
+      locations.reduce((sum, location) => sum + location.longitude, 0) /
+      locations.length,
+  };
+}
+
+function latLonToWorld(location: MapLocation, zoom: number) {
+  const scale = MAP_TILE_SIZE * 2 ** zoom;
+  const sinLatitude = Math.sin((location.latitude * Math.PI) / 180);
+  return {
+    x: ((location.longitude + 180) / 360) * scale,
+    y:
+      (0.5 - Math.log((1 + sinLatitude) / (1 - sinLatitude)) / (4 * Math.PI)) *
+      scale,
+  };
+}
+
+function worldToLatLon(point: MapPoint, zoom: number): MapLocation {
+  const scale = MAP_TILE_SIZE * 2 ** zoom;
+  const longitude = (point.x / scale) * 360 - 180;
+  const n = Math.PI - (2 * Math.PI * point.y) / scale;
+  const latitude =
+    (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  return { latitude, longitude };
+}
+
+function getVisibleTiles(
+  center: MapLocation,
+  zoom: number,
+  width: number,
+  height: number,
+) {
+  const centerWorld = latLonToWorld(center, zoom);
+  const topLeft = {
+    x: centerWorld.x - width / 2,
+    y: centerWorld.y - height / 2,
+  };
+  const startX = Math.floor(topLeft.x / MAP_TILE_SIZE);
+  const endX = Math.ceil((topLeft.x + width) / MAP_TILE_SIZE);
+  const startY = Math.floor(topLeft.y / MAP_TILE_SIZE);
+  const endY = Math.ceil((topLeft.y + height) / MAP_TILE_SIZE);
+  const maxTile = 2 ** zoom;
+  const tiles: MapTile[] = [];
+
+  for (let x = startX; x <= endX; x += 1) {
+    for (let y = startY; y <= endY; y += 1) {
+      if (y < 0 || y >= maxTile) {
+        continue;
+      }
+      const wrappedX = ((x % maxTile) + maxTile) % maxTile;
+      tiles.push({
+        key: `${zoom}-${wrappedX}-${y}`,
+        x: x * MAP_TILE_SIZE - topLeft.x,
+        y: y * MAP_TILE_SIZE - topLeft.y,
+        uri: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`,
+      });
+    }
+  }
+
+  return { tiles, topLeft, width, height };
+}
+
+function projectLocation(
+  location: MapLocation,
+  topLeft: MapPoint,
+  zoom: number,
+) {
+  const world = latLonToWorld(location, zoom);
+  return {
+    left: world.x - topLeft.x,
+    top: world.y - topLeft.y,
+  };
+}
+
+function getFallbackMapPoint(index: number, width: number, height: number) {
+  const fallback = markerPositions[index % markerPositions.length];
+  return {
+    left: (fallback.left / 100) * width,
+    top: (fallback.top / 100) * height,
+  };
+}
+
 function MapHome({
   matches,
   selectedMatch,
   selectedMatchId,
+  searchQuery,
+  userCity,
   onSelect,
+  onClearSelection,
   onOpenDetail,
   onJoin,
   loading,
@@ -1192,35 +1476,288 @@ function MapHome({
   matches: MatchResponse[];
   selectedMatch: MatchResponse | null;
   selectedMatchId: string | null;
+  searchQuery: string;
+  userCity: string;
   onSelect: (id: string) => void;
+  onClearSelection: () => void;
   onOpenDetail: (id: string) => void;
   onJoin: (id: string, team: TeamSide) => void;
   loading: boolean;
 }) {
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(MAP_DEFAULT_ZOOM);
+  const [userLocation, setUserLocation] = useState<MapLocation | null>(null);
+  const suggestedCenter = useMemo(
+    () => getMapCenter(matches, userLocation),
+    [matches, userLocation],
+  );
+  const [mapCenter, setMapCenter] = useState<MapLocation>(suggestedCenter);
+  const initializedCenter = useRef(false);
+  const previousSearchQuery = useRef(searchQuery);
+  const panStart = useRef(dragOffset);
+  const movedDuringGesture = useRef(false);
+  const latestDragOffset = useRef(dragOffset);
+
+  useEffect(() => {
+    if (!initializedCenter.current || userLocation) {
+      setMapCenter(userLocation ?? getCityMapCenter(userCity));
+      initializedCenter.current = true;
+    }
+  }, [userCity, userLocation]);
+
+  useEffect(() => {
+    const selectedLocation = selectedMatch
+      ? getMatchLocation(selectedMatch)
+      : null;
+    if (selectedLocation) {
+      setMapCenter(selectedLocation);
+      setDragOffset({ x: 0, y: 0 });
+      previousSearchQuery.current = searchQuery;
+      return;
+    }
+
+    const currentQuery = searchQuery.trim();
+    const previousQuery = previousSearchQuery.current.trim();
+    if (currentQuery && matches.length > 0) {
+      setMapCenter(getMapCenter(matches, null));
+      setDragOffset({ x: 0, y: 0 });
+    } else if (!currentQuery && previousQuery) {
+      setMapCenter(getCityMapCenter(userCity));
+      setDragOffset({ x: 0, y: 0 });
+    }
+    previousSearchQuery.current = searchQuery;
+  }, [matches, searchQuery, selectedMatch, userCity]);
+
+  useEffect(() => {
+    latestDragOffset.current = dragOffset;
+  }, [dragOffset]);
+
+  const canvasWidth = Math.max(viewport.width + 768, 1200);
+  const canvasHeight = Math.max(viewport.height + 768, 1200);
+  const canvasLeft = (viewport.width - canvasWidth) / 2;
+  const canvasTop = (viewport.height - canvasHeight) / 2;
+  const mapData = useMemo(
+    () => getVisibleTiles(mapCenter, zoom, canvasWidth, canvasHeight),
+    [canvasHeight, canvasWidth, mapCenter, zoom],
+  );
+  const markerCoordinates = useMemo(
+    () =>
+      matches.map((match, index) => {
+        const location = getMatchLocation(match);
+        return location
+          ? projectLocation(location, mapData.topLeft, zoom)
+          : getFallbackMapPoint(index, canvasWidth, canvasHeight);
+      }),
+    [canvasHeight, canvasWidth, mapData.topLeft, matches, zoom],
+  );
+
+  function commitDrag(nextOffset: { x: number; y: number }) {
+    if (nextOffset.x === 0 && nextOffset.y === 0) {
+      return;
+    }
+    const centerWorld = latLonToWorld(mapCenter, zoom);
+    setMapCenter(
+      worldToLatLon(
+        {
+          x: centerWorld.x - nextOffset.x,
+          y: centerWorld.y - nextOffset.y,
+        },
+        zoom,
+      ),
+    );
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  function selectNearestMarker(locationX: number, locationY: number) {
+    const point = {
+      x: locationX - canvasLeft - latestDragOffset.current.x,
+      y: locationY - canvasTop - latestDragOffset.current.y,
+    };
+    const hitIndex = markerCoordinates.findIndex((coordinate) => {
+      const dx = coordinate.left - point.x;
+      const dy = coordinate.top - point.y;
+      return Math.sqrt(dx * dx + dy * dy) <= 42;
+    });
+
+    if (hitIndex >= 0) {
+      onSelect(matches[hitIndex].id);
+      return;
+    }
+
+    onClearSelection();
+  }
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          movedDuringGesture.current = false;
+          panStart.current = latestDragOffset.current;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2) {
+            movedDuringGesture.current = true;
+          }
+          setDragOffset({
+            x: panStart.current.x + gesture.dx,
+            y: panStart.current.y + gesture.dy,
+          });
+        },
+        onPanResponderRelease: (event) => {
+          if (movedDuringGesture.current) {
+            commitDrag(latestDragOffset.current);
+            return;
+          }
+          selectNearestMarker(
+            event.nativeEvent.locationX,
+            event.nativeEvent.locationY,
+          );
+        },
+      }),
+    [canvasLeft, canvasTop, mapCenter, markerCoordinates, matches, zoom],
+  );
+
+  function zoomIn() {
+    setZoom((current) => Math.min(MAP_MAX_ZOOM, current + 1));
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  function zoomOut() {
+    setZoom((current) => Math.max(MAP_MIN_ZOOM, current - 1));
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  function useMyLocation() {
+    if (!("geolocation" in navigator)) {
+      Alert.alert(
+        "Ubicacion no disponible",
+        "Este navegador no expone geolocalizacion.",
+      );
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setDragOffset({ x: 0, y: 0 });
+      },
+      () => {
+        Alert.alert(
+          "No se pudo usar tu ubicacion",
+          "Revisa permisos de ubicacion del navegador.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
+
   return (
-    <View style={styles.mapStage}>
-      <MapLines />
-      {matches.slice(0, markerPositions.length).map((match, index) => {
-        const position = markerPositions[index];
-        const active = match.id === selectedMatchId;
-        return (
-          <Pressable
-            key={match.id}
-            style={[styles.mapMarkerWrap, position]}
-            onPress={() => onSelect(match.id)}
-          >
-            <View
+    <View
+      style={styles.mapStage}
+      onLayout={(event) => setViewport(event.nativeEvent.layout)}
+    >
+      <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
+        <View
+          style={[
+            styles.mapCanvas,
+            {
+              left: canvasLeft,
+              top: canvasTop,
+              width: canvasWidth,
+              height: canvasHeight,
+              transform: [
+                { translateX: dragOffset.x },
+                { translateY: dragOffset.y },
+              ],
+            },
+          ]}
+        >
+          {mapData.tiles.map((tile) => (
+            <Image
+              key={tile.key}
+              source={{ uri: tile.uri }}
               style={[
-                styles.mapMarkerHalo,
-                active && styles.mapMarkerHaloActive,
+                styles.mapTile,
+                {
+                  left: tile.x,
+                  top: tile.y,
+                  width: MAP_TILE_SIZE,
+                  height: MAP_TILE_SIZE,
+                },
               ]}
             />
+          ))}
+          <View pointerEvents="none" style={styles.mapOverlay} />
+          {matches.map((match, index) => {
+            const coordinate = markerCoordinates[index];
+            const active = match.id === selectedMatchId;
+            return (
+              <View
+                key={match.id}
+                pointerEvents="none"
+                style={[
+                  styles.mapMarkerWrap,
+                  {
+                    left: coordinate.left - MARKER_SIZE / 2,
+                    top: coordinate.top - MARKER_SIZE / 2,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.mapMarkerHalo,
+                    active && styles.mapMarkerHaloActive,
+                  ]}
+                />
+                <View
+                  style={[styles.mapMarker, active && styles.mapMarkerActive]}
+                />
+              </View>
+            );
+          })}
+          {userLocation ? (
             <View
-              style={[styles.mapMarker, active && styles.mapMarkerActive]}
+              pointerEvents="none"
+              style={[
+                styles.userLocationMarker,
+                {
+                  left:
+                    projectLocation(userLocation, mapData.topLeft, zoom).left -
+                    11,
+                  top:
+                    projectLocation(userLocation, mapData.topLeft, zoom).top -
+                    11,
+                },
+              ]}
             />
-          </Pressable>
-        );
-      })}
+          ) : null}
+        </View>
+      </View>
+      <Pressable style={styles.mapLocationButton} onPress={useMyLocation}>
+        <Text style={styles.mapLocationText}>Mi ubicacion</Text>
+      </Pressable>
+      <View style={styles.mapZoomControls}>
+        <Pressable style={styles.mapZoomButton} onPress={zoomIn}>
+          <Text style={styles.mapZoomText}>+</Text>
+        </Pressable>
+        <Pressable style={styles.mapZoomButton} onPress={zoomOut}>
+          <Text style={styles.mapZoomText}>-</Text>
+        </Pressable>
+      </View>
+
+      {loading ? (
+        <View style={styles.mapLoadingPill}>
+          <ActivityIndicator color="#0A110E" />
+          <Text style={styles.mapLoadingText}>Actualizando</Text>
+        </View>
+      ) : null}
       {selectedMatch ? (
         <SelectedPopup
           match={selectedMatch}
@@ -1228,13 +1765,237 @@ function MapHome({
           onJoin={onJoin}
           loading={loading}
         />
-      ) : (
-        <EmptyPopup />
-      )}
+      ) : null}
     </View>
   );
 }
+function LocationPickerMap({
+  value,
+  city,
+  fieldName,
+  onChange,
+}: {
+  value: MapLocation;
+  city: string;
+  fieldName: string;
+  onChange: (location: MapLocation, address?: string) => void;
+}) {
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
+  const [center, setCenter] = useState<MapLocation>(value);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(15);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [locationSearching, setLocationSearching] = useState(false);
+  const panStart = useRef(dragOffset);
+  const movedDuringGesture = useRef(false);
+  const latestDragOffset = useRef(dragOffset);
 
+  useEffect(() => {
+    latestDragOffset.current = dragOffset;
+  }, [dragOffset]);
+
+  useEffect(() => {
+    setCenter(value);
+  }, [value.latitude, value.longitude]);
+
+  const canvasWidth = Math.max(viewport.width + 768, 1200);
+  const canvasHeight = Math.max(viewport.height + 768, 1200);
+  const canvasLeft = (viewport.width - canvasWidth) / 2;
+  const canvasTop = (viewport.height - canvasHeight) / 2;
+  const mapData = useMemo(
+    () => getVisibleTiles(center, zoom, canvasWidth, canvasHeight),
+    [canvasHeight, canvasWidth, center, zoom],
+  );
+  const selectedPoint = projectLocation(value, mapData.topLeft, zoom);
+
+  function commitDrag(nextOffset: { x: number; y: number }) {
+    if (nextOffset.x === 0 && nextOffset.y === 0) {
+      return;
+    }
+    const centerWorld = latLonToWorld(center, zoom);
+    setCenter(
+      worldToLatLon(
+        {
+          x: centerWorld.x - nextOffset.x,
+          y: centerWorld.y - nextOffset.y,
+        },
+        zoom,
+      ),
+    );
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  function pickPoint(locationX: number, locationY: number) {
+    const worldPoint = {
+      x:
+        mapData.topLeft.x + locationX - canvasLeft - latestDragOffset.current.x,
+      y: mapData.topLeft.y + locationY - canvasTop - latestDragOffset.current.y,
+    };
+    const nextLocation = worldToLatLon(worldPoint, zoom);
+    onChange(nextLocation);
+    setCenter(nextLocation);
+    setDragOffset({ x: 0, y: 0 });
+  }
+
+  async function searchLocation() {
+    const query = locationSearch.trim();
+    if (!query) {
+      const fallback = getCityMapCenter(city);
+      setCenter(fallback);
+      onChange(fallback, city || undefined);
+      setDragOffset({ x: 0, y: 0 });
+      return;
+    }
+
+    setLocationSearching(true);
+    try {
+      const result = await geocodePlace(query, city);
+      if (!result) {
+        Alert.alert("Sin resultados", "No he encontrado esa direccion.");
+        return;
+      }
+      setCenter(result.location);
+      onChange(result.location, result.address);
+      setDragOffset({ x: 0, y: 0 });
+    } catch (error) {
+      Alert.alert(
+        "No se pudo buscar",
+        error instanceof Error ? error.message : "Error inesperado",
+      );
+    } finally {
+      setLocationSearching(false);
+    }
+  }
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: () => {
+          movedDuringGesture.current = false;
+          panStart.current = latestDragOffset.current;
+        },
+        onPanResponderMove: (_event, gesture) => {
+          if (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2) {
+            movedDuringGesture.current = true;
+          }
+          setDragOffset({
+            x: panStart.current.x + gesture.dx,
+            y: panStart.current.y + gesture.dy,
+          });
+        },
+        onPanResponderRelease: (event) => {
+          if (movedDuringGesture.current) {
+            commitDrag(latestDragOffset.current);
+            return;
+          }
+          pickPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
+        },
+      }),
+    [canvasLeft, canvasTop, center, mapData.topLeft, onChange, zoom],
+  );
+
+  return (
+    <View
+      style={styles.locationPickerMap}
+      onLayout={(event) => setViewport(event.nativeEvent.layout)}
+    >
+      <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
+        <View
+          style={[
+            styles.mapCanvas,
+            {
+              left: canvasLeft,
+              top: canvasTop,
+              width: canvasWidth,
+              height: canvasHeight,
+              transform: [
+                { translateX: dragOffset.x },
+                { translateY: dragOffset.y },
+              ],
+            },
+          ]}
+        >
+          {mapData.tiles.map((tile) => (
+            <Image
+              key={tile.key}
+              source={{ uri: tile.uri }}
+              style={[
+                styles.mapTile,
+                {
+                  left: tile.x,
+                  top: tile.y,
+                  width: MAP_TILE_SIZE,
+                  height: MAP_TILE_SIZE,
+                },
+              ]}
+            />
+          ))}
+          <View pointerEvents="none" style={styles.mapOverlay} />
+          <View
+            pointerEvents="none"
+            style={[
+              styles.locationPickedMarker,
+              {
+                left: selectedPoint.left - 18,
+                top: selectedPoint.top - 36,
+              },
+            ]}
+          >
+            <View style={styles.locationPickedDot} />
+          </View>
+        </View>
+      </View>
+      <View style={styles.locationSearchPanel}>
+        <TextInput
+          style={styles.locationSearchInput}
+          value={locationSearch}
+          onChangeText={setLocationSearch}
+          placeholder={`Buscar calle cerca de ${fieldName || city || "la pista"}`}
+          placeholderTextColor="rgba(227,219,208,0.62)"
+          returnKeyType="search"
+          onSubmitEditing={searchLocation}
+        />
+        <Pressable
+          style={styles.locationSearchButton}
+          onPress={searchLocation}
+          disabled={locationSearching}
+        >
+          {locationSearching ? (
+            <ActivityIndicator color="#0A110E" />
+          ) : (
+            <Text style={styles.locationSearchButtonText}>Buscar</Text>
+          )}
+        </Pressable>
+      </View>
+      <View style={styles.locationPickerHint}>
+        <Text style={styles.locationPickerHintText}>
+          Toca el mapa para fijar la pista
+        </Text>
+      </View>
+      <View style={styles.locationPickerZoom}>
+        <Pressable
+          style={styles.mapZoomButton}
+          onPress={() =>
+            setZoom((current) => Math.min(MAP_MAX_ZOOM, current + 1))
+          }
+        >
+          <Text style={styles.mapZoomText}>+</Text>
+        </Pressable>
+        <Pressable
+          style={styles.mapZoomButton}
+          onPress={() =>
+            setZoom((current) => Math.max(MAP_MIN_ZOOM, current - 1))
+          }
+        >
+          <Text style={styles.mapZoomText}>-</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 function ListHome({
   matches,
   myMatches,
@@ -1244,7 +2005,6 @@ function ListHome({
   selectedMatchId,
   onSelect,
   onOpenDetail,
-  onSearchChange,
   onFilterChange,
   onJoin,
   onLeave,
@@ -1255,7 +2015,6 @@ function ListHome({
   currentUserId: string | null;
   matchFilter: MatchFilter;
   searchQuery: string;
-  onSearchChange: (value: string) => void;
   onFilterChange: (value: MatchFilter) => void;
   selectedMatchId: string | null;
   onSelect: (id: string) => void;
@@ -1306,6 +2065,12 @@ function ListHome({
         <ListStat value={matches.length} label="Disponibles" />
         <ListStat value={filteredMyMatches.length} label="Mis partidos" />
       </View>
+      {loading ? (
+        <View style={styles.listLoadingRow}>
+          <ActivityIndicator color="#B3F351" />
+          <Text style={styles.listLoadingText}>Actualizando partidos</Text>
+        </View>
+      ) : null}
       {renderedMatches.length === 0 ? (
         <View style={styles.emptyPanel}>
           <Text style={styles.emptyTitle}>{emptyTitle}</Text>
@@ -1336,8 +2101,12 @@ function ListHome({
                   <StatusBadge status={match.status} />
                 </View>
                 <View style={styles.matchMetaRow}>
-                  <Text style={styles.matchDatePill}>{formatDate(match.startsAt)}</Text>
-                  <Text style={styles.matchCityPill}>{match.field?.city ?? "Sin ciudad"}</Text>
+                  <Text style={styles.matchDatePill}>
+                    {formatDate(match.startsAt)}
+                  </Text>
+                  <Text style={styles.matchCityPill}>
+                    {match.field?.city ?? "Sin ciudad"}
+                  </Text>
                 </View>
                 <Text style={styles.listCardMeta}>
                   {match.field?.name ?? "Campo por confirmar"}
@@ -1525,6 +2294,28 @@ function MapLines() {
           },
         ]}
       />
+      <View
+        style={[
+          styles.roadLine,
+          {
+            top: "82%",
+            left: "-18%",
+            width: "122%",
+            transform: [{ rotate: "-11deg" }],
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.roadLineThin,
+          {
+            top: "2%",
+            left: "50%",
+            height: "58%",
+            transform: [{ rotate: "31deg" }],
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -1657,12 +2448,28 @@ function BottomNav({
       </Pressable>
       <Pressable
         style={[
+          styles.navItem,
           styles.navCreateItem,
-          active === "create" && styles.navCreateItemActive,
+          active === "create" && styles.navItemActive,
         ]}
         onPress={onCreate}
       >
-        <Text style={styles.navCreateIcon}>+</Text>
+        <Text
+          style={[
+            styles.navCreateIcon,
+            active === "create" && styles.navIconActive,
+          ]}
+        >
+          +
+        </Text>
+        <Text
+          style={[
+            styles.navLabel,
+            active === "create" && styles.navLabelActive,
+          ]}
+        >
+          Crear partido
+        </Text>
       </Pressable>
       <Pressable
         style={[styles.navItem, active === "profile" && styles.navItemActive]}
@@ -1679,13 +2486,12 @@ function BottomNav({
             active === "profile" && styles.navLabelActive,
           ]}
         >
-          Profile
+          Perfil
         </Text>
       </Pressable>
     </View>
   );
 }
-
 function Field({
   label,
   ...props
@@ -1976,7 +2782,7 @@ const styles = StyleSheet.create({
   },
   authButtonText: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
   authNotice: { color: "#4A4A4A", fontSize: 13 },
-  homeShell: { flex: 1, paddingTop: 8, backgroundColor: "#343434" },
+  homeShell: { flex: 1, paddingTop: 0, backgroundColor: "#343434" },
   statusBarMock: {
     height: 44,
     paddingHorizontal: 28,
@@ -2007,19 +2813,31 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   homeHeader: {
-    paddingHorizontal: 28,
-    paddingTop: 10,
+    paddingHorizontal: 22,
+    paddingTop: 18,
     paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  smallLabel: { color: "#B3F351", fontSize: 13, fontWeight: "900" },
+  smallLabel: {
+    color: "#B3F351",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
   homeTitle: {
-    color: "#E3DBD0",
-    fontSize: 40,
+    color: "#F7F1E8",
+    fontSize: 42,
     fontWeight: "900",
     letterSpacing: 0,
+    lineHeight: 46,
+  },
+  homeSubtitle: {
+    color: "rgba(227,219,208,0.68)",
+    fontSize: 13,
+    fontWeight: "800",
+    marginTop: 2,
   },
   screenTitle: {
     color: "#E3DBD0",
@@ -2027,25 +2845,72 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  profileShortcut: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#B3F351",
+  homeSearchWrap: { paddingHorizontal: 22, paddingBottom: 10 },
+  homeSearchPill: {
+    minHeight: 56,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.18)",
+    backgroundColor: "rgba(10,17,14,0.42)",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 18,
+    gap: 10,
   },
-  profileShortcutText: { color: "#0A110E", fontSize: 19, fontWeight: "900" },
+  homeSearchIcon: {
+    width: 24,
+    height: 24,
+    position: "relative",
+  },
+  homeSearchCircle: {
+    position: "absolute",
+    left: 2,
+    top: 2,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: "#B3F351",
+  },
+  homeSearchHandle: {
+    position: "absolute",
+    left: 16,
+    top: 16,
+    width: 10,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#B3F351",
+    transform: [{ rotate: "45deg" }],
+  },
+  homeSearchInput: {
+    flex: 1,
+    color: "#E3DBD0",
+    fontSize: 15,
+    fontWeight: "800",
+    paddingVertical: 0,
+  },
   homeToolbar: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 22,
+    paddingBottom: 8,
   },
+  refreshMiniButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.22)",
+    backgroundColor: "rgba(227,219,208,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refreshMiniText: { color: "#E3DBD0", fontSize: 18, fontWeight: "900" },
   createMiniButton: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
+    width: 50,
+    height: 50,
+    borderRadius: 17,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
@@ -2056,19 +2921,95 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     marginTop: -2,
   },
-  mapStage: { flex: 1, marginTop: 14, overflow: "hidden", backgroundColor: "#343434" },
+  mapStage: {
+    flex: 1,
+    marginHorizontal: 14,
+    marginTop: 2,
+    marginBottom: 108,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "#343434",
+  },
+  mapCanvas: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    overflow: "hidden",
+    backgroundColor: "#C8D2C4",
+  },
+  mapTile: { position: "absolute" },
+  mapOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(52,52,52,0.08)",
+  },
+  mapLocationButton: {
+    position: "absolute",
+    top: 16,
+    right: 16,
+    minHeight: 42,
+    borderRadius: 16,
+    backgroundColor: "#B3F351",
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 18,
+  },
+  mapLocationText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
+  mapZoomControls: {
+    position: "absolute",
+    top: 66,
+    right: 16,
+    gap: 8,
+    zIndex: 18,
+  },
+  mapZoomButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: "rgba(10,17,14,0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapZoomText: { color: "#E3DBD0", fontSize: 22, fontWeight: "900" },
+  userLocationMarker: {
+    position: "absolute",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#2979FF",
+    borderWidth: 4,
+    borderColor: "#FFFFFF",
+  },
   roadLine: {
     position: "absolute",
-    height: 10,
-    borderRadius: 10,
-    backgroundColor: "#4A4A4A",
+    height: 13,
+    borderRadius: 13,
+    backgroundColor: "#505050",
   },
   roadLineThin: {
     position: "absolute",
-    width: 10,
-    borderRadius: 10,
-    backgroundColor: "#4A4A4A",
+    width: 13,
+    borderRadius: 13,
+    backgroundColor: "#505050",
   },
+  mapLoadingPill: {
+    position: "absolute",
+    top: 18,
+    alignSelf: "center",
+    minHeight: 42,
+    borderRadius: 21,
+    backgroundColor: "#B3F351",
+    paddingHorizontal: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    zIndex: 20,
+  },
+  mapLoadingText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   mapMarkerWrap: {
     position: "absolute",
     width: 64,
@@ -2129,7 +3070,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   popupLimeText: { color: "#0A110E", fontWeight: "900" },
-  listContent: { paddingHorizontal: 22, paddingTop: 12, paddingBottom: 120, gap: 14 },
+  listContent: {
+    paddingHorizontal: 22,
+    paddingTop: 14,
+    paddingBottom: 120,
+    gap: 14,
+  },
   searchPill: {
     minHeight: 52,
     borderRadius: 26,
@@ -2150,6 +3096,18 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     paddingVertical: 0,
   },
+  listLoadingRow: {
+    minHeight: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(227,219,208,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  listLoadingText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
   listFilterRow: {
     height: 48,
     borderRadius: 24,
@@ -2172,7 +3130,9 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     borderRadius: 22,
-    backgroundColor: "rgba(156,163,175,0.10)",
+    backgroundColor: "rgba(227,219,208,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.08)",
   },
   listStatValue: { color: "#B3F351", fontSize: 28, fontWeight: "900" },
   listStatLabel: {
@@ -2183,7 +3143,7 @@ const styles = StyleSheet.create({
   },
   listCard: {
     backgroundColor: "#E3DBD0",
-    borderRadius: 28,
+    borderRadius: 24,
     padding: 18,
     gap: 12,
   },
@@ -2202,6 +3162,32 @@ const styles = StyleSheet.create({
   statusPillText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
   statusPillTextClosed: { color: "#8F2727" },
   listCardMeta: { color: "#4A4A4A", fontSize: 14, marginTop: 4 },
+  matchMetaRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 10,
+  },
+  matchDatePill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "#0A110E",
+    color: "#E3DBD0",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  matchCityPill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "#B3F351",
+    color: "#0A110E",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   occupancyBlock: { marginTop: 12, gap: 7 },
   occupancyTrack: {
     height: 8,
@@ -2266,40 +3252,46 @@ const styles = StyleSheet.create({
   emptyText: { color: "#BDB6AE", fontSize: 14, marginTop: 6 },
   bottomNav: {
     position: "absolute",
-    left: 22,
-    right: 22,
-    bottom: 22,
-    minHeight: 72,
-    borderRadius: 36,
-    backgroundColor: "#0A110E",
+    left: 18,
+    right: 18,
+    bottom: 18,
+    minHeight: 84,
+    borderRadius: 30,
+    backgroundColor: "rgba(10,17,14,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
     padding: 8,
     gap: 8,
   },
   navItem: {
     flex: 1,
-    borderRadius: 30,
+    borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
+    gap: 3,
   },
   navItemActive: { backgroundColor: "#B3F351" },
-  navCreateItem: {
-    width: 58,
-    borderRadius: 30,
-    backgroundColor: "#B3F351",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  navCreateItemActive: { backgroundColor: "#E3DBD0" },
+  navCreateItem: {},
   navCreateIcon: {
-    color: "#0A110E",
-    fontSize: 30,
+    color: "rgba(227,219,208,0.78)",
+    fontSize: 24,
     fontWeight: "900",
-    marginTop: -2,
+    lineHeight: 24,
+    marginTop: -1,
   },
-  navIcon: { color: "#E3DBD0", fontSize: 18, fontWeight: "900" },
+  navIcon: {
+    color: "rgba(227,219,208,0.78)",
+    fontSize: 18,
+    fontWeight: "900",
+  },
   navIconActive: { color: "#0A110E" },
-  navLabel: { color: "#E3DBD0", fontSize: 11, fontWeight: "800", marginTop: 2 },
+  navLabel: {
+    color: "rgba(227,219,208,0.78)",
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
   navLabelActive: { color: "#0A110E" },
   profileContent: { padding: 22, paddingBottom: 120, gap: 20 },
   profileHeader: {
@@ -2347,6 +3339,20 @@ const styles = StyleSheet.create({
   avatarInitial: { color: "#0A110E", fontSize: 50, fontWeight: "900" },
   profileName: { color: "#E3DBD0", fontSize: 30, fontWeight: "900" },
   profileMeta: { color: "#9CA3AF", fontSize: 14, fontWeight: "700" },
+  nextMatchCard: {
+    borderRadius: 24,
+    backgroundColor: "#B3F351",
+    padding: 18,
+    gap: 6,
+  },
+  nextMatchEyebrow: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
+  nextMatchTitle: { color: "#0A110E", fontSize: 22, fontWeight: "900" },
+  nextMatchMeta: {
+    color: "#263126",
+    fontSize: 13,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
   profileEditor: {
     backgroundColor: "#E3DBD0",
     borderRadius: 28,
@@ -2387,6 +3393,94 @@ const styles = StyleSheet.create({
   compactMatchTitle: { color: "#0A110E", fontSize: 17, fontWeight: "900" },
   compactMatchMeta: { color: "#4A4A4A", marginTop: 4, fontSize: 13 },
   createContent: { padding: 22, paddingBottom: 120, gap: 18 },
+  locationScreen: { flex: 1, padding: 22, paddingBottom: 24, gap: 16 },
+  locationPickerShell: {
+    flex: 1,
+    minHeight: 360,
+    borderRadius: 28,
+    overflow: "hidden",
+    backgroundColor: "#C8D2C4",
+  },
+  locationPickerMap: {
+    flex: 1,
+    overflow: "hidden",
+    backgroundColor: "#C8D2C4",
+  },
+  locationSearchPanel: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    right: 14,
+    zIndex: 12,
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  locationSearchInput: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 16,
+    backgroundColor: "rgba(10,17,14,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.18)",
+    color: "#F7F1E8",
+    paddingHorizontal: 14,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  locationSearchButton: {
+    minHeight: 44,
+    minWidth: 82,
+    borderRadius: 16,
+    backgroundColor: "#B7F36B",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  locationSearchButtonText: {
+    color: "#0A110E",
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  locationPickerHint: {
+    position: "absolute",
+    left: 18,
+    top: 70,
+    minHeight: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(10,17,14,0.78)",
+    paddingHorizontal: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationPickerHintText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
+  locationPickerZoom: { position: "absolute", right: 18, top: 70, gap: 8 },
+  locationPickedMarker: {
+    position: "absolute",
+    width: 36,
+    height: 44,
+    borderRadius: 18,
+    backgroundColor: "#B3F351",
+    borderWidth: 4,
+    borderColor: "#0A110E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationPickedDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#0A110E",
+  },
+  locationSummaryCard: {
+    borderRadius: 24,
+    backgroundColor: "#E3DBD0",
+    padding: 16,
+    gap: 10,
+  },
+  locationSummaryTitle: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
+  locationSummaryText: { color: "#4A4A4A", fontSize: 13, fontWeight: "800" },
   screenHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -2407,6 +3501,27 @@ const styles = StyleSheet.create({
     padding: 18,
     gap: 14,
   },
+  locationCreateCard: {
+    borderRadius: 20,
+    backgroundColor: "#F6F1EA",
+    padding: 14,
+    gap: 12,
+  },
+  locationCreateTitle: { color: "#0A110E", fontSize: 14, fontWeight: "900" },
+  locationCreateMeta: {
+    color: "#4A4A4A",
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  locationPickButton: {
+    minHeight: 44,
+    borderRadius: 22,
+    backgroundColor: "#0A110E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationPickText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
   formRow: { flexDirection: "row", gap: 10 },
   formHalf: { flex: 1 },
   detailContent: { padding: 22, paddingBottom: 120, gap: 18 },

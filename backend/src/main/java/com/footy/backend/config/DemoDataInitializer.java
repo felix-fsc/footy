@@ -48,13 +48,19 @@ public class DemoDataInitializer implements ApplicationRunner {
                         passwordEncoder.encode("Password123"),
                         "Demo Footy")));
 
+        matchRepository.findAll().stream()
+                .filter(match -> match.getField() != null)
+                .filter(match -> match.getField().getCity() == null
+                        || !"Huelva".equalsIgnoreCase(match.getField().getCity()))
+                .forEach(Match::cancel);
+
         List<DemoMatch> demoMatches = List.of(
-                new DemoMatch("Partido demo Footy", "Campo Municipal Norte", "Calle Futbol 12", "Madrid", "40.416775", "-3.703790", 1, 19, 5),
-                new DemoMatch("Futbol 7 tarde", "Polideportivo Chamberi", "Calle Santander 7", "Madrid", "40.436210", "-3.703120", 2, 20, 7),
-                new DemoMatch("Pachanga centro", "Campo Retiro Sur", "Avenida Menendez Pelayo 41", "Madrid", "40.411450", "-3.681250", 3, 18, 5),
-                new DemoMatch("Liga amistosa norte", "La Chopera Futbol", "Paseo de la Chopera 6", "Madrid", "40.393410", "-3.699630", 4, 21, 6),
-                new DemoMatch("Partido de felix", "Campo Saladillo", "Calle Hermanos Alvarez Quintero 13", "Huelva", "37.261420", "-6.944720", 2, 17, 5),
-                new DemoMatch("Domingo futbolero", "Ciudad Deportiva Huelva", "Avenida Decano del Futbol", "Huelva", "37.255830", "-6.950150", 5, 11, 7));
+                new DemoMatch("Footy Huelva - Nuevo Colombino", "Estadio Nuevo Colombino", "Avenida del Decano del Futbol Espanol s/n", "Huelva", "37.257910", "-6.950640", 1, 19, 5),
+                new DemoMatch("Footy Huelva - Perez Cubillas", "Campo Municipal Perez Cubillas", "Barriada Perez Cubillas", "Huelva", "37.278330", "-6.929580", 2, 20, 7),
+                new DemoMatch("Footy Huelva - Ciudad Deportiva", "Ciudad Deportiva Decano del Futbol Espanol", "Poligono Agroalimentario", "Huelva", "37.255830", "-6.950150", 3, 18, 5),
+                new DemoMatch("Footy Huelva - Los Rosales", "Campo Municipal Los Rosales", "Barriada Los Rosales", "Huelva", "37.270550", "-6.931760", 4, 21, 6),
+                new DemoMatch("Footy Huelva - Diego Lobato", "Polideportivo Municipal Diego Lobato", "Calle Artesanos", "Huelva", "37.273950", "-6.936850", 2, 17, 5),
+                new DemoMatch("Footy Huelva - Saladillo", "Campo Municipal Saladillo", "Calle Hermanos Alvarez Quintero 13", "Huelva", "37.261420", "-6.944720", 5, 11, 7));
 
         for (DemoMatch demoMatch : demoMatches) {
             if (matchRepository.existsByTitle(demoMatch.title())) {
