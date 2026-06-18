@@ -1431,7 +1431,7 @@ function getVisibleTiles(
         key: `${zoom}-${wrappedX}-${y}`,
         x: x * MAP_TILE_SIZE - topLeft.x,
         y: y * MAP_TILE_SIZE - topLeft.y,
-        uri: `https://tile.openstreetmap.org/${zoom}/${wrappedX}/${y}.png`,
+        uri: `https://api.maptiler.com/maps/streets-v2/${zoom}/${wrappedX}/${y}.png?key=2MmV019neQt8MfLPITjf`,
       });
     }
   }
