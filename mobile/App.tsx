@@ -1,3 +1,4 @@
+import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import {
   ComponentProps,
@@ -126,25 +127,34 @@ function getBrowserStorage() {
 }
 
 const sessionStorageAdapter = {
-  get() {
+  async get() {
     try {
+      if (Platform.OS !== "web") {
+        return await SecureStore.getItemAsync(SESSION_STORAGE_KEY);
+      }
       return getBrowserStorage()?.getItem(SESSION_STORAGE_KEY) ?? null;
     } catch {
       return null;
     }
   },
-  set(session: StoredSession) {
+  async set(session: StoredSession) {
+    const value = JSON.stringify(session);
     try {
-      getBrowserStorage()?.setItem(
-        SESSION_STORAGE_KEY,
-        JSON.stringify(session),
-      );
+      if (Platform.OS !== "web") {
+        await SecureStore.setItemAsync(SESSION_STORAGE_KEY, value);
+        return;
+      }
+      getBrowserStorage()?.setItem(SESSION_STORAGE_KEY, value);
     } catch {
-      // Native persistence will be added with AsyncStorage when building device auth.
+      // Ignore unavailable storage.
     }
   },
-  clear() {
+  async clear() {
     try {
+      if (Platform.OS !== "web") {
+        await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
+        return;
+      }
       getBrowserStorage()?.removeItem(SESSION_STORAGE_KEY);
     } catch {
       // Ignore unavailable storage.
@@ -166,7 +176,7 @@ const markerPositions = [
 const FOOTY_MAP_WIDTH = 6000;
 const FOOTY_MAP_HEIGHT = 6000;
 const FOOTY_MAP_PADDING = 120;
-const MARKER_SIZE = 64;
+const MARKER_SIZE = 46;
 const MAP_TILE_SIZE = 256;
 const MAP_DEFAULT_ZOOM = 13;
 const MAP_MIN_ZOOM = 11;
@@ -238,7 +248,7 @@ export default function App() {
   }, [matches, searchQuery]);
 
   const selectedMatch = selectedMatchId
-    ? (matches.find((match) => match.id === selectedMatchId) ?? null)
+    ? (visibleMatches.find((match) => match.id === selectedMatchId) ?? null)
     : null;
   const selectedIsMine = selectedMatch
     ? myMatches.some((match) => match.id === selectedMatch.id)
@@ -274,7 +284,7 @@ export default function App() {
 
       if (!response.ok) {
         if (response.status === 401 && token) {
-          sessionStorageAdapter.clear();
+          void sessionStorageAdapter.clear();
           setToken(null);
           setUserName(null);
           setCurrentUserId(null);
@@ -330,33 +340,47 @@ export default function App() {
   }
 
   useEffect(() => {
-    const storedSession = sessionStorageAdapter.get();
-    if (!storedSession) {
-      setRestoringSession(false);
-      return;
+    let active = true;
+
+    async function restoreSession() {
+      const storedSession = await sessionStorageAdapter.get();
+      if (!active) {
+        return;
+      }
+      if (!storedSession) {
+        setRestoringSession(false);
+        return;
+      }
+
+      try {
+        const session = JSON.parse(storedSession) as StoredSession;
+        if (
+          session.expiresAt &&
+          new Date(session.expiresAt).getTime() <= Date.now()
+        ) {
+          await sessionStorageAdapter.clear();
+          setNotice("Sesion caducada");
+        } else {
+          setToken(session.accessToken);
+          setUserName(session.user.displayName);
+          setCurrentUserId(session.user.id);
+          setEmail(session.user.email);
+          setNotice(`Sesion restaurada como ${session.user.displayName}`);
+        }
+      } catch {
+        await sessionStorageAdapter.clear();
+        setNotice("Sesion local reiniciada");
+      } finally {
+        if (active) {
+          setRestoringSession(false);
+        }
+      }
     }
 
-    try {
-      const session = JSON.parse(storedSession) as StoredSession;
-      if (
-        session.expiresAt &&
-        new Date(session.expiresAt).getTime() <= Date.now()
-      ) {
-        sessionStorageAdapter.clear();
-        setNotice("Sesion caducada");
-      } else {
-        setToken(session.accessToken);
-        setUserName(session.user.displayName);
-        setCurrentUserId(session.user.id);
-        setEmail(session.user.email);
-        setNotice(`Sesion restaurada como ${session.user.displayName}`);
-      }
-    } catch {
-      sessionStorageAdapter.clear();
-      setNotice("Sesion local reiniciada");
-    } finally {
-      setRestoringSession(false);
-    }
+    restoreSession();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const loadMessages = useCallback(
@@ -460,7 +484,7 @@ export default function App() {
       setUserName(auth.user.displayName);
       setCurrentUserId(auth.user.id);
       setEmail(auth.user.email);
-      sessionStorageAdapter.set({
+      void sessionStorageAdapter.set({
         accessToken: auth.accessToken,
         expiresAt: auth.expiresAt,
         user: auth.user,
@@ -605,8 +629,8 @@ export default function App() {
     }
   }
 
-  async function sendMessage() {
-    if (!selectedMatch || !messageText.trim()) {
+  async function sendMatchMessage(content: string) {
+    if (!selectedMatch || !content.trim()) {
       return;
     }
 
@@ -614,7 +638,7 @@ export default function App() {
     try {
       await request(`/api/matches/${selectedMatch.id}/messages`, {
         method: "POST",
-        body: JSON.stringify({ content: messageText.trim() }),
+        body: JSON.stringify({ content: content.trim() }),
       });
       setMessageText("");
       await loadMessages(selectedMatch.id);
@@ -630,13 +654,22 @@ export default function App() {
     }
   }
 
+  async function sendMessage() {
+    await sendMatchMessage(messageText);
+  }
+
   function openDetail(matchId: string) {
     setSelectedMatchId(matchId);
     setAppTab("detail");
   }
 
+  function goHome() {
+    setSelectedMatchId(null);
+    setAppTab("home");
+  }
+
   function logout() {
-    sessionStorageAdapter.clear();
+    void sessionStorageAdapter.clear();
     setToken(null);
     setUserName(null);
     setCurrentUserId(null);
@@ -651,6 +684,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <View style={styles.loadingScreen}>
           <ActivityIndicator color="#B3F351" />
           <Text style={styles.loadingText}>Cargando sesion</Text>
@@ -663,13 +697,12 @@ export default function App() {
     return (
       <SafeAreaView style={styles.authScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <ScrollView
           contentContainerStyle={styles.authContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.authHeroMark}>
-            <Text style={styles.authHeroLetter}>F</Text>
-          </View>
+
           <View style={styles.authBrandRow}>
             <LogoMark size={54} />
             <Text style={styles.authBrand}>Footy</Text>
@@ -738,12 +771,13 @@ export default function App() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <ScrollView contentContainerStyle={styles.profileContent}>
           <TopStatus />
           <View style={styles.profileHeader}>
             <Pressable
               style={styles.backButton}
-              onPress={() => setAppTab("home")}
+              onPress={goHome}
             >
               <Text style={styles.backButtonText}>{"<"}</Text>
             </Pressable>
@@ -909,7 +943,7 @@ export default function App() {
         </ScrollView>
         <BottomNav
           active="profile"
-          onHome={() => setAppTab("home")}
+          onHome={goHome}
           onCreate={() => setAppTab("create")}
           onProfile={() => setAppTab("profile")}
         />
@@ -920,6 +954,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <View style={styles.locationScreen}>
           <TopStatus />
           <View style={styles.screenHeader}>
@@ -969,6 +1004,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <ScrollView
           contentContainerStyle={styles.createContent}
           keyboardShouldPersistTaps="handled"
@@ -981,7 +1017,7 @@ export default function App() {
             </View>
             <Pressable
               style={styles.closePill}
-              onPress={() => setAppTab("home")}
+              onPress={goHome}
             >
               <Text style={styles.closePillText}>Cerrar</Text>
             </Pressable>
@@ -1055,7 +1091,7 @@ export default function App() {
         </ScrollView>
         <BottomNav
           active="create"
-          onHome={() => setAppTab("home")}
+          onHome={goHome}
           onCreate={() => setAppTab("create")}
           onProfile={() => setAppTab("profile")}
         />
@@ -1067,6 +1103,7 @@ export default function App() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
+      <ScreenBubbles />
         <ScrollView
           contentContainerStyle={styles.detailContent}
           keyboardShouldPersistTaps="handled"
@@ -1079,7 +1116,7 @@ export default function App() {
             </View>
             <Pressable
               style={styles.closePill}
-              onPress={() => setAppTab("home")}
+              onPress={goHome}
             >
               <Text style={styles.closePillText}>Volver</Text>
             </Pressable>
@@ -1197,6 +1234,25 @@ export default function App() {
                     </View>
                   ))
                 )}
+                {selectedIsParticipant ? (
+                  <View style={styles.quickMessageRow}>
+                    <QuickMessageButton
+                      label="Voy llegando"
+                      onPress={() => sendMatchMessage("Voy llegando")}
+                      disabled={loading}
+                    />
+                    <QuickMessageButton
+                      label="Confirmo"
+                      onPress={() => sendMatchMessage("Confirmo asistencia")}
+                      disabled={loading}
+                    />
+                    <QuickMessageButton
+                      label="Necesito peto"
+                      onPress={() => sendMatchMessage("Necesito peto")}
+                      disabled={loading}
+                    />
+                  </View>
+                ) : null}
                 <View style={styles.messageComposer}>
                   <TextInput
                     value={messageText}
@@ -1230,7 +1286,7 @@ export default function App() {
         </ScrollView>
         <BottomNav
           active="home"
-          onHome={() => setAppTab("home")}
+          onHome={goHome}
           onCreate={() => setAppTab("create")}
           onProfile={() => setAppTab("profile")}
         />
@@ -1241,6 +1297,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
+      <ScreenBubbles />
       <View style={styles.homeShell}>
         <View style={styles.homeHeader}>
           <View style={styles.homeHeroBanner}>
@@ -1249,16 +1306,16 @@ export default function App() {
             <View style={styles.homeBannerTopline}>
               <View>
                 <View style={styles.homeTitleRow}>
-                  <LogoMark size={42} />
+                  <AppLogoImage size={36} />
                   <Text style={styles.homeTitle}>Footy</Text>
                 </View>
+
               </View>
               <View style={styles.homeStreakPill}>
                 <Text style={styles.homeStreakNumber}>{victoryStreak}</Text>
                 <Text style={styles.homeStreakText}>racha</Text>
               </View>
             </View>
-
           </View>
         </View>
 
@@ -1322,9 +1379,6 @@ export default function App() {
             matches={visibleMatches}
             myMatches={myMatches}
             currentUserId={currentUserId}
-            matchFilter={matchFilter}
-            searchQuery={searchQuery}
-            onFilterChange={setMatchFilter}
             selectedMatchId={selectedMatchId}
             onSelect={setSelectedMatchId}
             onOpenDetail={openDetail}
@@ -1336,7 +1390,7 @@ export default function App() {
       </View>
       <BottomNav
         active="home"
-        onHome={() => setAppTab("home")}
+        onHome={goHome}
         onCreate={() => setAppTab("create")}
         onProfile={() => setAppTab("profile")}
       />
@@ -1344,6 +1398,23 @@ export default function App() {
   );
 }
 
+function ScreenBubbles() {
+  return (
+    <View pointerEvents="none" style={styles.screenBubbles}>
+      <View style={styles.screenBubbleOne} />
+      <View style={styles.screenBubbleTwo} />
+      <View style={styles.screenBubbleThree} />
+    </View>
+  );
+}
+function AppLogoImage({ size = 42 }: { size?: number }) {
+  return (
+    <Image
+      source={require("./assets/icon.png")}
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.22) }}
+    />
+  );
+}
 function LogoMark({ size = 42 }: { size?: number }) {
   return (
     <View
@@ -1570,6 +1641,7 @@ function MapHome({
   const panStart = useRef(dragOffset);
   const movedDuringGesture = useRef(false);
   const latestDragOffset = useRef(dragOffset);
+  const suppressNextMapClear = useRef(false);
 
   useEffect(() => {
     if (!initializedCenter.current || userLocation) {
@@ -1660,11 +1732,20 @@ function MapHome({
     onClearSelection();
   }
 
+  function clearSelectionFromMap() {
+    if (suppressNextMapClear.current) {
+      suppressNextMapClear.current = false;
+      return;
+    }
+    onClearSelection();
+  }
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           movedDuringGesture.current = false;
@@ -1766,14 +1847,20 @@ function MapHome({
               ]}
             />
           ))}
-          <View pointerEvents="none" style={styles.mapOverlay} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={clearSelectionFromMap}>
+            <View pointerEvents="none" style={styles.mapOverlay} />
+          </Pressable>
           {matches.map((match, index) => {
             const coordinate = markerCoordinates[index];
             const active = match.id === selectedMatchId;
             return (
-              <View
+              <Pressable
                 key={match.id}
-                pointerEvents="none"
+                hitSlop={12}
+                onPress={() => {
+                  suppressNextMapClear.current = true;
+                  onSelect(match.id);
+                }}
                 style={[
                   styles.mapMarkerWrap,
                   {
@@ -1789,9 +1876,11 @@ function MapHome({
                   ]}
                 />
                 <View
-                  style={[styles.mapMarker, active && styles.mapMarkerActive]}
-                />
-              </View>
+                  style={[styles.mapMarkerPin, active && styles.mapMarkerPinActive]}
+                >
+                  <View style={styles.mapMarkerDot} />
+                </View>
+              </Pressable>
             );
           })}
           {userLocation ? (
@@ -1835,6 +1924,7 @@ function MapHome({
           match={selectedMatch}
           onOpenDetail={onOpenDetail}
           onJoin={onJoin}
+          onClose={onClearSelection}
           loading={loading}
         />
       ) : null}
@@ -1942,8 +2032,9 @@ function LocationPickerMap({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: () => {
           movedDuringGesture.current = false;
@@ -2072,22 +2163,14 @@ function ListHome({
   matches,
   myMatches,
   currentUserId,
-  matchFilter,
-  searchQuery,
   selectedMatchId,
   onSelect,
   onOpenDetail,
-  onFilterChange,
-  onJoin,
-  onLeave,
   loading,
 }: {
   matches: MatchResponse[];
   myMatches: MatchResponse[];
   currentUserId: string | null;
-  matchFilter: MatchFilter;
-  searchQuery: string;
-  onFilterChange: (value: MatchFilter) => void;
   selectedMatchId: string | null;
   onSelect: (id: string) => void;
   onOpenDetail: (id: string) => void;
@@ -2095,36 +2178,15 @@ function ListHome({
   onLeave: (id: string) => void;
   loading: boolean;
 }) {
-  const filteredMyMatches = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return myMatches;
-    }
-
-    return myMatches.filter((match) => {
-      const field = match.field;
-      return [match.title, field?.name, field?.city, field?.address]
-        .filter(Boolean)
-        .some((value) => value!.toLowerCase().includes(query));
-    });
-  }, [myMatches, searchQuery]);
-  const renderedMatches = matchFilter === "mine" ? filteredMyMatches : matches;
-  const emptyTitle =
-    matchFilter === "mine" ? "Aun no tienes partidos" : "No hay partidos cerca";
-  const emptyText =
-    matchFilter === "mine"
-      ? "Unete a un equipo o crea tu primer partido."
-      : "Crea un partido con el boton central.";
+  const renderedMatches = matches;
+  const emptyTitle = "No hay partidos cerca";
+  const emptyText = "Crea un partido con el boton central.";
 
   return (
     <ScrollView
       contentContainerStyle={styles.listContent}
       showsVerticalScrollIndicator={false}
     >
-      <View style={styles.listStatsRow}>
-        <ListStat value={matches.length} label="Disponibles" />
-        <ListStat value={filteredMyMatches.length} label="Mis partidos" />
-      </View>
       {loading ? (
         <View style={styles.listLoadingRow}>
           <ActivityIndicator color="#B3F351" />
@@ -2143,12 +2205,16 @@ function ListHome({
             currentUserId && userParticipatesInMatch(match, currentUserId),
           );
           return (
-            <View
+            <Pressable
               key={match.id}
               style={[
                 styles.listCard,
                 match.id === selectedMatchId && styles.listCardSelected,
               ]}
+              onPress={() => {
+                onSelect(match.id);
+                onOpenDetail(match.id);
+              }}
             >
               <ImageBackground
                 source={{
@@ -2158,97 +2224,63 @@ function ListHome({
                 style={styles.listCardImageWrap}
               >
                 <View style={styles.listCardOverlay} />
-                <Pressable
-                  style={styles.listCardPressArea}
-                  onPress={() => {
-                    onSelect(match.id);
-                    onOpenDetail(match.id);
-                  }}
-                >
+                <View style={styles.listCardPressArea}>
                   <View style={styles.cardTitleRow}>
-                    <Text style={styles.listCardTitle}>{match.title}</Text>
+                    <Text style={styles.listCardTitle} numberOfLines={1}>
+                      {match.title}
+                    </Text>
                     <StatusBadge status={match.status} />
                   </View>
                   <View style={styles.matchMetaRow}>
-                    <Text style={styles.matchDatePill}>
+                    <Text style={styles.matchDatePill} numberOfLines={1}>
                       {formatDate(match.startsAt)}
                     </Text>
-                    <Text style={styles.matchCityPill}>
+                    <Text style={styles.matchCityPill} numberOfLines={1}>
                       {match.field?.city ?? "Sin ciudad"}
                     </Text>
+                    {mine || participating ? (
+                      <Text style={styles.matchMinePill}>Apuntado</Text>
+                    ) : null}
                   </View>
-                  <Text style={styles.listCardMeta}>
+                  <Text style={styles.listCardMeta} numberOfLines={1}>
                     {match.field?.name ?? "Campo por confirmar"}
                   </Text>
                   <OccupancyBar match={match} />
-                </Pressable>
-                {mine ? (
-                  <Pressable
-                    style={styles.ghostDangerButton}
-                    onPress={() => onLeave(match.id)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.ghostDangerText}>Salir</Text>
-                  </Pressable>
-                ) : (
-                  <View style={styles.cardActions}>
-                    <Pressable
-                      style={styles.darkJoinButton}
-                      onPress={() => onJoin(match.id, "A")}
-                      disabled={
-                        loading || !isMatchOpen(match) || isTeamFull(match, "A")
-                      }
-                    >
-                      <Text style={styles.darkJoinText}>
-                        {!isMatchOpen(match)
-                          ? "Cerrado"
-                          : isTeamFull(match, "A")
-                            ? "Completo"
-                            : "Equipo A"}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.limeJoinButton}
-                      onPress={() => onJoin(match.id, "B")}
-                      disabled={
-                        loading || !isMatchOpen(match) || isTeamFull(match, "B")
-                      }
-                    >
-                      <Text style={styles.limeJoinText}>
-                        {!isMatchOpen(match)
-                          ? "Cerrado"
-                          : isTeamFull(match, "B")
-                            ? "Completo"
-                            : "Equipo B"}
-                      </Text>
-                    </Pressable>
-                  </View>
-                )}
+                </View>
+                <View style={styles.listDetailButton}>
+                  <Text style={styles.listDetailText}>Ver detalle</Text>
+                </View>
               </ImageBackground>
-            </View>
+            </Pressable>
           );
         })
       )}
     </ScrollView>
   );
 }
-
 function SelectedPopup({
   match,
   onOpenDetail,
   onJoin,
+  onClose,
   loading,
 }: {
   match: MatchResponse;
   onOpenDetail: (id: string) => void;
   onJoin: (id: string, team: TeamSide) => void;
+  onClose: () => void;
   loading: boolean;
 }) {
   return (
     <View style={styles.popupCard}>
       <View style={styles.popupAccent} />
       <View style={styles.popupBody}>
-        <Text style={styles.popupLabel}>Partido seleccionado</Text>
+<View style={styles.popupHeaderRow}>
+          <Text style={styles.popupLabel}>Partido seleccionado</Text>
+          <Pressable style={styles.popupCloseButton} onPress={onClose}>
+            <Text style={styles.popupCloseText}>x</Text>
+          </Pressable>
+        </View>
         <View style={styles.cardTitleRow}>
           <Text style={styles.popupTitle}>{match.title}</Text>
           <StatusBadge status={match.status} />
@@ -2667,6 +2699,35 @@ function ModeButton({
     </Pressable>
   );
 }
+function HomeMetric({ value, label }: { value: number; label: string }) {
+  return (
+    <View style={styles.homeMetric}>
+      <Text style={styles.homeMetricValue}>{value}</Text>
+      <Text style={styles.homeMetricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function QuickMessageButton({
+  label,
+  onPress,
+  disabled,
+}: {
+  label: string;
+  onPress: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Pressable
+      style={[styles.quickMessageButton, disabled && styles.quickMessageDisabled]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <Text style={styles.quickMessageText}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function ListStat({ value, label }: { value: number; label: string }) {
   return (
     <View style={styles.listStat}>
@@ -2820,8 +2881,43 @@ const styles = StyleSheet.create({
   },
   authBrandRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   homeTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  authScreen: { flex: 1, backgroundColor: "#343434" },
-  darkScreen: { flex: 1, backgroundColor: "#343434" },
+  screenBubbles: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    overflow: "hidden",
+  },
+  screenBubbleOne: {
+    position: "absolute",
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    right: -130,
+    top: 20,
+    backgroundColor: "rgba(179,243,81,0.08)",
+  },
+  screenBubbleTwo: {
+    position: "absolute",
+    width: 138,
+    height: 138,
+    borderRadius: 69,
+    left: -110,
+    bottom: 140,
+    backgroundColor: "rgba(227,219,208,0.045)",
+  },
+  screenBubbleThree: {
+    position: "absolute",
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    right: 34,
+    bottom: 52,
+    backgroundColor: "rgba(179,243,81,0.045)",
+  },
+  authScreen: { flex: 1, backgroundColor: "#000000" },
+  darkScreen: { flex: 1, backgroundColor: "#000000" },
   loadingScreen: {
     flex: 1,
     alignItems: "center",
@@ -2833,7 +2929,7 @@ const styles = StyleSheet.create({
   authHeroMark: {
     width: 64,
     height: 64,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
@@ -2848,7 +2944,7 @@ const styles = StyleSheet.create({
   authCopy: { color: "#BDB6AE", fontSize: 17, lineHeight: 24, maxWidth: 360 },
   authCard: {
     backgroundColor: "#E3DBD0",
-    borderRadius: 28,
+    borderRadius: 19,
     padding: 10,
     gap: 14,
   },
@@ -2861,9 +2957,9 @@ const styles = StyleSheet.create({
   },
   modeSwitchDark: {
     flex: 1,
-    height: 56,
-    borderRadius: 22,
-    backgroundColor: "rgba(10,17,14,0.66)",
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: "rgba(0,0,0,0.58)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
@@ -2928,11 +3024,11 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
   input: {
     minHeight: 50,
-    borderRadius: 16,
+    borderRadius: 14,
     paddingHorizontal: 14,
     backgroundColor: "#F6F1EA",
     color: "#0A110E",
-    fontSize: 15,
+    fontSize: 14,
   },
   authButton: {
     minHeight: 54,
@@ -2943,9 +3039,9 @@ const styles = StyleSheet.create({
   },
   authButtonText: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
   authNotice: { color: "#4A4A4A", fontSize: 13 },
-  homeShell: { flex: 1, paddingTop: 0, backgroundColor: "#343434" },
+  homeShell: { flex: 1, paddingTop: 0, backgroundColor: "#000000" },
   statusBarMock: {
-    height: 44,
+    height: Platform.OS === "android" ? 10 : 18,
     paddingHorizontal: 28,
     flexDirection: "row",
     alignItems: "center",
@@ -2974,34 +3070,35 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   homeHeader: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: Platform.OS === "android" ? 10 : 8,
+    paddingBottom: 5,
   },
   homeHeroBanner: {
-    minHeight: 142,
-    borderRadius: 30,
-    backgroundColor: "#101814",
+    minHeight: 72,
+    borderRadius: 19,
+    backgroundColor: "rgba(7,12,9,0.88)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.10)",
     overflow: "hidden",
-    padding: 10,
-    justifyContent: "space-between",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    justifyContent: "center",
   },
   homeBannerCircleOne: {
     position: "absolute",
-    width: 210,
-    height: 210,
-    borderRadius: 105,
+    width: 138,
+    height: 138,
+    borderRadius: 69,
     right: -72,
     top: -82,
     backgroundColor: "rgba(179,243,81,0.16)",
   },
   homeBannerCircleTwo: {
     position: "absolute",
-    width: 124,
-    height: 124,
-    borderRadius: 62,
+    width: 88,
+    height: 88,
+    borderRadius: 44,
     left: -38,
     bottom: -48,
     backgroundColor: "rgba(227,219,208,0.07)",
@@ -3013,14 +3110,14 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   homeStreakPill: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
   },
-  homeStreakNumber: { color: "#0A110E", fontSize: 25, fontWeight: "900" },
+  homeStreakNumber: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
   homeStreakText: {
     color: "#0A110E",
     fontSize: 9,
@@ -3029,22 +3126,40 @@ const styles = StyleSheet.create({
   },
   smallLabel: {
     color: "#B3F351",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   homeTitle: {
     color: "#F7F1E8",
-    fontSize: 42,
+    fontSize: 27,
     fontWeight: "900",
     letterSpacing: 0,
-    lineHeight: 46,
+    lineHeight: 31,
   },
   homeSubtitle: {
     color: "rgba(227,219,208,0.68)",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     marginTop: 2,
+  },
+  homeMetricRow: { flexDirection: "row", gap: 8 },
+  homeMetric: {
+    flex: 1,
+    minHeight: 54,
+    borderRadius: 18,
+    backgroundColor: "rgba(227,219,208,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
+    paddingHorizontal: 10,
+    justifyContent: "center",
+  },
+  homeMetricValue: { color: "#B3F351", fontSize: 22, fontWeight: "900" },
+  homeMetricLabel: {
+    color: "rgba(227,219,208,0.72)",
+    fontSize: 9,
+    fontWeight: "900",
+    marginTop: -1,
   },
   screenTitle: {
     color: "#E3DBD0",
@@ -3052,16 +3167,16 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 0,
   },
-  homeSearchWrap: { paddingHorizontal: 18, paddingBottom: 10 },
+  homeSearchWrap: { paddingHorizontal: 14, paddingBottom: 5 },
   homeSearchPill: {
-    minHeight: 56,
-    borderRadius: 18,
+    minHeight: 44,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.18)",
     backgroundColor: "rgba(10,17,14,0.42)",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     gap: 10,
   },
   homeSearchIcon: {
@@ -3092,7 +3207,7 @@ const styles = StyleSheet.create({
   homeSearchInput: {
     flex: 1,
     color: "#E3DBD0",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "800",
     paddingVertical: 0,
   },
@@ -3100,12 +3215,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     paddingBottom: 6,
   },
   refreshMiniButton: {
-    width: 50,
-    height: 50,
+    width: 40,
+    height: 40,
     borderRadius: 17,
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.22)",
@@ -3115,8 +3230,8 @@ const styles = StyleSheet.create({
   },
   refreshMiniText: { color: "#E3DBD0", fontSize: 18, fontWeight: "900" },
   createMiniButton: {
-    width: 50,
-    height: 50,
+    width: 40,
+    height: 40,
     borderRadius: 17,
     backgroundColor: "#B3F351",
     alignItems: "center",
@@ -3138,7 +3253,7 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
     overflow: "hidden",
-    backgroundColor: "#343434",
+    backgroundColor: "#000000",
   },
   mapCanvas: {
     position: "absolute",
@@ -3189,7 +3304,7 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     minHeight: 42,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#B3F351",
     paddingHorizontal: 14,
     alignItems: "center",
@@ -3207,8 +3322,8 @@ const styles = StyleSheet.create({
   mapZoomButton: {
     width: 42,
     height: 42,
-    borderRadius: 16,
-    backgroundColor: "rgba(10,17,14,0.82)",
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.82)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3250,42 +3365,76 @@ const styles = StyleSheet.create({
   mapLoadingText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   mapMarkerWrap: {
     position: "absolute",
-    width: 64,
-    height: 64,
+    width: 46,
+    height: 46,
     alignItems: "center",
     justifyContent: "center",
+    zIndex: 12,
   },
   mapMarkerHalo: {
     position: "absolute",
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: "rgba(179,243,81,0.20)",
-  },
-  mapMarkerHaloActive: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: "rgba(179,243,81,0.30)",
-  },
-  mapMarker: {
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#B3F351",
+    backgroundColor: "rgba(179,243,81,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(179,243,81,0.25)",
   },
-  mapMarkerActive: { borderWidth: 5, borderColor: "#FFFFFF" },
+  mapMarkerHaloActive: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(179,243,81,0.24)",
+    borderColor: "rgba(247,241,232,0.42)",
+  },
+  mapMarkerPin: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#B3F351",
+    borderWidth: 3,
+    borderColor: "rgba(0,0,0,0.78)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapMarkerPinActive: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderColor: "#F7F1E8",
+  },
+  mapMarkerDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#0A110E",
+  },
   popupCard: {
     position: "absolute",
     left: 22,
     right: 22,
     bottom: 88,
-    borderRadius: 28,
+    borderRadius: 19,
     backgroundColor: "#E3DBD0",
     overflow: "hidden",
   },
   popupAccent: { height: 8, backgroundColor: "#B3F351" },
-  popupBody: { padding: 20, gap: 8 },
+  popupBody: { padding: 18, gap: 8 },
+  popupHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  popupCloseButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(10,17,14,0.10)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  popupCloseText: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
   popupLabel: { color: "#6C716D", fontSize: 12, fontWeight: "900" },
   popupTitle: { color: "#0A110E", fontSize: 24, fontWeight: "900" },
   popupMeta: { color: "#4A4A4A", fontSize: 14, lineHeight: 20 },
@@ -3309,10 +3458,10 @@ const styles = StyleSheet.create({
   },
   popupLimeText: { color: "#0A110E", fontWeight: "900" },
   listContent: {
-    paddingHorizontal: 22,
-    paddingTop: 14,
-    paddingBottom: 120,
-    gap: 14,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: Platform.OS === "android" ? 116 : 104,
+    gap: 10,
   },
   searchPill: {
     minHeight: 52,
@@ -3367,7 +3516,7 @@ const styles = StyleSheet.create({
   listStat: {
     flex: 1,
     padding: 16,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "rgba(227,219,208,0.08)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.08)",
@@ -3380,18 +3529,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   listCard: {
-    minHeight: 224,
-    borderRadius: 28,
+    minHeight: 142,
+    borderRadius: 19,
     overflow: "hidden",
-    backgroundColor: "rgba(10,17,14,0.82)",
+    backgroundColor: "rgba(0,0,0,0.82)",
   },
   listCardImageWrap: {
-    minHeight: 238,
-    padding: 16,
+    minHeight: 146,
+    padding: 12,
     justifyContent: "space-between",
-    gap: 14,
+    gap: 8,
   },
-  listCardImage: { borderRadius: 28, opacity: 0.48 },
+  listCardImage: { borderRadius: 22, opacity: 0.42 },
   listCardOverlay: {
     position: "absolute",
     left: 0,
@@ -3400,10 +3549,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(10,17,14,0.56)",
   },
-  listCardPressArea: { gap: 10 },
+  listCardPressArea: { gap: 6 },
   listCardSelected: { borderWidth: 2, borderColor: "#B3F351" },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 23, fontWeight: "900" },
+  listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 17, fontWeight: "900" },
   statusPill: {
     paddingHorizontal: 10,
     minHeight: 26,
@@ -3424,14 +3573,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 10,
+    marginTop: 4,
   },
   matchDatePill: {
     overflow: "hidden",
     borderRadius: 15,
     backgroundColor: "#0A110E",
     color: "#E3DBD0",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -3441,12 +3590,32 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#B3F351",
     color: "#0A110E",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  occupancyBlock: { marginTop: 12, gap: 7 },
+  matchMinePill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "rgba(227,219,208,0.16)",
+    color: "#E3DBD0",
+    fontSize: 9,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  listDetailButton: {
+    alignSelf: "flex-start",
+    minHeight: 32,
+    borderRadius: 14,
+    backgroundColor: "rgba(179,243,81,0.94)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  listDetailText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
+  occupancyBlock: { marginTop: 4, gap: 5 },
   occupancyTrack: {
     height: 8,
     borderRadius: 8,
@@ -3456,7 +3625,7 @@ const styles = StyleSheet.create({
   occupancyFill: { height: 8, borderRadius: 8, backgroundColor: "#B3F351" },
   occupancyText: {
     color: "rgba(227,219,208,0.90)",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
   },
   cardActions: { flexDirection: "row", gap: 10, marginTop: 2 },
@@ -3500,7 +3669,7 @@ const styles = StyleSheet.create({
   cancelMatchText: { color: "#FFFFFF", fontWeight: "900" },
   statusBanner: {
     minHeight: 44,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "rgba(217,88,88,0.16)",
     alignItems: "center",
     justifyContent: "center",
@@ -3519,19 +3688,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: 28,
     right: 28,
-    bottom: 14,
-    minHeight: 62,
-    borderRadius: 22,
-    backgroundColor: "rgba(10,17,14,0.92)",
+    bottom: Platform.OS === "android" ? 30 : 14,
+    minHeight: 54,
+    borderRadius: 19,
+    backgroundColor: "rgba(0,0,0,0.86)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.10)",
     flexDirection: "row",
-    padding: 6,
-    gap: 6,
+    padding: 5,
+    gap: 5,
   },
   navItem: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     gap: 1,
@@ -3540,34 +3709,34 @@ const styles = StyleSheet.create({
   navCreateItem: {},
   navCreateIcon: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: "900",
     lineHeight: 17,
     marginTop: -1,
   },
   navIcon: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "900",
   },
   navIconActive: { color: "#0A110E" },
   navLabel: {
     color: "rgba(227,219,208,0.78)",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
-    textAlign: "left",
+    textAlign: "center",
   },
   navLabelActive: { color: "#0A110E" },
-  profileContent: { padding: 18, paddingBottom: 104, gap: 12 },
+  profileContent: { padding: 18, paddingBottom: Platform.OS === "android" ? 116 : 104, gap: 12 },
   profileHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 19,
     backgroundColor: "rgba(227,219,208,0.12)",
     alignItems: "center",
     justifyContent: "center",
@@ -3577,7 +3746,7 @@ const styles = StyleSheet.create({
   logoutPill: {
     paddingHorizontal: 14,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "#B3F351",
     alignItems: "center",
     justifyContent: "center",
@@ -3586,7 +3755,7 @@ const styles = StyleSheet.create({
   profileHeroCard: {
     minHeight: 218,
     borderRadius: 26,
-    backgroundColor: "#101814",
+    backgroundColor: "rgba(7,12,9,0.88)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.12)",
     overflow: "hidden",
@@ -3610,7 +3779,7 @@ const styles = StyleSheet.create({
   },
   profileEyebrow: {
     color: "#B3F351",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
   },
@@ -3624,8 +3793,8 @@ const styles = StyleSheet.create({
   },
   editProfileText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
   streakBanner: {
-    minHeight: 56,
-    borderRadius: 18,
+    minHeight: 44,
+    borderRadius: 14,
     backgroundColor: "#B3F351",
     overflow: "hidden",
     flexDirection: "row",
@@ -3711,7 +3880,7 @@ const styles = StyleSheet.create({
   },
   profileEditor: {
     backgroundColor: "#E3DBD0",
-    borderRadius: 28,
+    borderRadius: 19,
     padding: 10,
     gap: 14,
   },
@@ -3719,7 +3888,7 @@ const styles = StyleSheet.create({
   positionButton: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "#F6F1EA",
     alignItems: "center",
     justifyContent: "center",
@@ -3771,12 +3940,12 @@ const styles = StyleSheet.create({
   compactMatchTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
   compactMatchMeta: { color: "rgba(227,219,208,0.82)", fontSize: 13 },
   compactMatchPlace: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
-  createContent: { padding: 22, paddingBottom: 120, gap: 18 },
+  createContent: { padding: 22, paddingBottom: Platform.OS === "android" ? 126 : 110, gap: 18 },
   locationScreen: { flex: 1, padding: 22, paddingBottom: 24, gap: 16 },
   locationPickerShell: {
     flex: 1,
     minHeight: 360,
-    borderRadius: 28,
+    borderRadius: 19,
     overflow: "hidden",
     backgroundColor: "#C8D2C4",
   },
@@ -3798,7 +3967,7 @@ const styles = StyleSheet.create({
   locationSearchInput: {
     flex: 1,
     minHeight: 44,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "rgba(10,17,14,0.88)",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.18)",
@@ -3810,7 +3979,7 @@ const styles = StyleSheet.create({
   locationSearchButton: {
     minHeight: 44,
     minWidth: 82,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#B7F36B",
     alignItems: "center",
     justifyContent: "center",
@@ -3818,7 +3987,7 @@ const styles = StyleSheet.create({
   },
   locationSearchButtonText: {
     color: "#0A110E",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
   },
@@ -3868,7 +4037,7 @@ const styles = StyleSheet.create({
   closePill: {
     paddingHorizontal: 14,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "rgba(227,219,208,0.12)",
     alignItems: "center",
     justifyContent: "center",
@@ -3876,7 +4045,7 @@ const styles = StyleSheet.create({
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
   createCard: {
     backgroundColor: "#E3DBD0",
-    borderRadius: 28,
+    borderRadius: 19,
     padding: 10,
     gap: 14,
   },
@@ -3895,7 +4064,7 @@ const styles = StyleSheet.create({
   },
   locationPickButton: {
     minHeight: 44,
-    borderRadius: 22,
+    borderRadius: 19,
     backgroundColor: "#0A110E",
     alignItems: "center",
     justifyContent: "center",
@@ -3903,10 +4072,10 @@ const styles = StyleSheet.create({
   locationPickText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
   formRow: { flexDirection: "row", gap: 10 },
   formHalf: { flex: 1 },
-  detailContent: { padding: 22, paddingBottom: 120, gap: 18 },
+  detailContent: { padding: 22, paddingBottom: Platform.OS === "android" ? 126 : 110, gap: 18 },
   detailHeroCard: {
     backgroundColor: "#E3DBD0",
-    borderRadius: 28,
+    borderRadius: 19,
     padding: 10,
     gap: 10,
   },
@@ -3961,7 +4130,20 @@ const styles = StyleSheet.create({
   },
   messageAuthor: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
   messageContent: { color: "#E3DBD0", fontSize: 15, lineHeight: 21 },
-  messageTime: { color: "#9CA3AF", fontSize: 11, fontWeight: "700" },
+    messageTime: { color: "#9CA3AF", fontSize: 11, fontWeight: "700" },
+  quickMessageRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  quickMessageButton: {
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(227,219,208,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.14)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickMessageDisabled: { opacity: 0.5 },
+  quickMessageText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
   messageComposer: { flexDirection: "row", gap: 10, alignItems: "center" },
   messageInput: {
     flex: 1,
@@ -3970,11 +4152,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: "#E3DBD0",
     color: "#0A110E",
-    fontSize: 15,
+    fontSize: 14,
   },
   sendButton: {
     minHeight: 50,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
     borderRadius: 25,
     backgroundColor: "#B3F351",
     alignItems: "center",
