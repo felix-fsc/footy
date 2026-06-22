@@ -29,4 +29,9 @@ public class AuthController {
     AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
     }
+
+    @PostMapping("/google")
+    AuthResponse google(@Valid @RequestBody GoogleAuthRequest request) {
+        return authService.loginWithGoogle(request);
+    }
 }

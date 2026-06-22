@@ -27,7 +27,7 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/health", "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers("/api/health", "/api/auth/register", "/api/auth/login", "/api/auth/google").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/matches").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/matches/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/matches/*/messages").authenticated()

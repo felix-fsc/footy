@@ -16,5 +16,21 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build:
+      context: ./backend
+    container_name: footy-backend
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/footy
+      SPRING_DATASOURCE_USERNAME: footy
+      SPRING_DATASOURCE_PASSWORD: footy
+      APP_SECURITY_JWT_SECRET: local-development-secret-for-footy-32-chars-minimum
+      APP_SECURITY_GOOGLE_CLIENT_IDS: ${APP_SECURITY_GOOGLE_CLIENT_IDS:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   footy-postgres18-cluster-data:

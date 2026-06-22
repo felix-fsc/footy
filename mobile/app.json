@@ -1,43 +1,67 @@
 {
-    "expo":  {
-                 "name":  "Footy",
-                 "slug":  "footy",
-                 "version":  "1.0.0",
-                 "orientation":  "portrait",
-                 "icon":  "./assets/icon.png",
-                 "userInterfaceStyle":  "dark",
-                 "ios":  {
-                             "supportsTablet":  true
-                         },
-                 "android":  {
-                                 "package":  "com.felixfsc.footy",
-                                 "adaptiveIcon":  {
-                                                      "backgroundColor":  "#B3F351",
-                                                      "foregroundImage":  "./assets/android-icon-foreground.png",
-                                                      "backgroundImage":  "./assets/android-icon-background.png",
-                                                      "monochromeImage":  "./assets/android-icon-monochrome.png"
-                                                  },
-                                 "predictiveBackGestureEnabled":  false
-                             },
-                 "web":  {
-                             "favicon":  "./assets/favicon.png"
-                         },
-                 "extra":  {
-                               "eas":  {
-                                           "projectId":  "e60435d2-4adc-445b-9ff1-951ea61e76ea"
-                                       }
-                           },
-                 "plugins":  [
-                                 "expo-secure-store"
-                             ],
-                 "androidStatusBar":  {
-                                          "backgroundColor":  "#000000",
-                                          "barStyle":  "light-content",
-                                          "translucent":  false
-                                      },
-                 "androidNavigationBar":  {
-                                              "backgroundColor":  "#000000",
-                                              "barStyle":  "light-content"
-                                          }
-             }
+  "expo": {
+    "name": "Footy",
+    "slug": "footy",
+    "scheme": "footy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Footy usa tu ubicacion para mostrar partidos cercanos y centrar el mapa.",
+        "NSUserNotificationsUsageDescription": "Footy usa notificaciones para avisarte de partidos y novedades importantes."
+      }
+    },
+    "android": {
+      "package": "com.felixfsc.footy",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "POST_NOTIFICATIONS"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#B3F351",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e60435d2-4adc-445b-9ff1-951ea61e76ea"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-video",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Footy usa tu ubicacion para mostrar partidos cercanos y centrar el mapa."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#B3F351"
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "androidStatusBar": {
+      "backgroundColor": "#000000",
+      "barStyle": "light-content",
+      "translucent": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#000000",
+      "barStyle": "light-content"
+    }
+  }
 }
