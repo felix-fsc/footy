@@ -137,6 +137,7 @@ public class AuthService {
                 .claim("email", user.getEmail())
                 .claim("displayName", user.getDisplayName())
                 .claim("username", user.getUsername())
+                .claim("role", user.getRole().name())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
@@ -145,7 +146,7 @@ public class AuthService {
                 token,
                 TOKEN_TYPE,
                 expiresAt,
-                new AuthUserResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getUsername()));
+                new AuthUserResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getUsername(), user.getRole()));
     }
 
     private String normalizeEmail(String email) {

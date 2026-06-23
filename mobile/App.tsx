@@ -45,6 +45,7 @@ type HomeMode = "map" | "list";
 type MatchFilter = "all" | "mine";
 type AppTab = "home" | "create" | "detail" | "profile" | "location";
 type TeamSide = "A" | "B";
+type UserRole = "PLAYER" | "ADMIN";
 type PlayerPosition = "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD";
 type MapLocation = { latitude: number; longitude: number };
 type MapPoint = { x: number; y: number };
@@ -60,6 +61,7 @@ type AuthResponse = {
     email: string;
     displayName: string;
     username?: string | null;
+    role?: UserRole | null;
   };
 };
 
@@ -123,6 +125,15 @@ type MessageResponse = {
   };
   content: string;
   sentAt: string;
+};
+
+type SavedFieldResponse = {
+  id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 type PlayerProfileResponse = {
@@ -318,7 +329,7 @@ const markerPositions = [
 const FOOTY_MAP_WIDTH = 6000;
 const FOOTY_MAP_HEIGHT = 6000;
 const FOOTY_MAP_PADDING = 120;
-const MARKER_SIZE = 46;
+const MARKER_SIZE = 28;
 const MAP_TILE_SIZE = 256;
 const MAP_DEFAULT_ZOOM = 13;
 const MAP_MIN_ZOOM = 11;
@@ -404,9 +415,12 @@ function AppContent() {
   const [password, setPassword] = useState("Password123");
   const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<UserRole>("PLAYER");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [matches, setMatches] = useState<MatchResponse[]>([]);
   const [myMatches, setMyMatches] = useState<MatchResponse[]>([]);
+  const [savedFields, setSavedFields] = useState<SavedFieldResponse[]>([]);
+  const [selectedSavedFieldId, setSelectedSavedFieldId] = useState<string | null>(null);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -447,8 +461,15 @@ function AppContent() {
   const [newLongitude, setNewLongitude] = useState(-6.94472);
   const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [showCreateCalendar, setShowCreateCalendar] = useState(false);
+  const [adminFieldEditingId, setAdminFieldEditingId] = useState<string | null>(null);
+  const [adminFieldName, setAdminFieldName] = useState("");
+  const [adminFieldAddress, setAdminFieldAddress] = useState("");
+  const [adminFieldCity, setAdminFieldCity] = useState("Huelva");
+  const [adminFieldLatitude, setAdminFieldLatitude] = useState("");
+  const [adminFieldLongitude, setAdminFieldLongitude] = useState("");
 
   const isLoggedIn = Boolean(token);
+  const isAdmin = currentUserRole === "ADMIN";
   const visibleMatches = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
@@ -503,6 +524,7 @@ function AppContent() {
           void sessionStorageAdapter.clear();
           setToken(null);
           setUserName(null);
+          setCurrentUserRole("PLAYER");
           setCurrentUserId(null);
           setMyMatches([]);
           setMessages([]);
@@ -536,6 +558,11 @@ function AppContent() {
         : null,
     );
   }, [request, token]);
+
+  const loadSavedFields = useCallback(async () => {
+    const fields = await request<SavedFieldResponse[]>("/api/fields");
+    setSavedFields(fields);
+  }, [request]);
 
   async function refreshMatches() {
     setLoading(true);
@@ -572,6 +599,7 @@ function AppContent() {
         const session = JSON.parse(storedSession) as StoredSession;
         setToken(session.accessToken);
         setUserName(session.user.displayName);
+        setCurrentUserRole(session.user.role ?? "PLAYER");
         setCurrentUserId(session.user.id);
         setEmail(session.user.email);
         setNotice(`Sesion restaurada como ${session.user.displayName}`);
@@ -598,6 +626,10 @@ function AppContent() {
 
     requestAppPermissions().catch(() => undefined);
   }, [showIntroVideo]);
+
+  useEffect(() => {
+    loadSavedFields().catch(() => setSavedFields([]));
+  }, [loadSavedFields]);
 
   const loadMessages = useCallback(
     async (matchId: string) => {
@@ -754,6 +786,7 @@ function AppContent() {
   async function applyAuthenticatedSession(auth: AuthResponse) {
       setToken(auth.accessToken);
       setUserName(auth.user.displayName);
+      setCurrentUserRole(auth.user.role ?? "PLAYER");
       setCurrentUserId(auth.user.id);
       setEmail(auth.user.email);
       void sessionStorageAdapter.set({
@@ -830,6 +863,91 @@ function AppContent() {
     }
   }
 
+  function selectSavedField(field: SavedFieldResponse | null) {
+    setSelectedSavedFieldId(field?.id ?? null);
+    if (!field) {
+      return;
+    }
+    setNewFieldName(field.name);
+    setNewAddress(field.address ?? "");
+    setNewCity(field.city ?? "");
+    if (typeof field.latitude === "number") {
+      setNewLatitude(field.latitude);
+    }
+    if (typeof field.longitude === "number") {
+      setNewLongitude(field.longitude);
+    }
+  }
+
+  function startAdminFieldCreate() {
+    setAdminFieldEditingId(null);
+    setAdminFieldName("");
+    setAdminFieldAddress("");
+    setAdminFieldCity(profile?.city || profileCity || "Huelva");
+    setAdminFieldLatitude(newLatitude.toFixed(6));
+    setAdminFieldLongitude(newLongitude.toFixed(6));
+  }
+
+  function startAdminFieldEdit(field: SavedFieldResponse) {
+    setAdminFieldEditingId(field.id);
+    setAdminFieldName(field.name);
+    setAdminFieldAddress(field.address ?? "");
+    setAdminFieldCity(field.city ?? "");
+    setAdminFieldLatitude(String(field.latitude ?? ""));
+    setAdminFieldLongitude(String(field.longitude ?? ""));
+  }
+
+  async function saveAdminField() {
+    const latitude = Number(adminFieldLatitude.replace(",", "."));
+    const longitude = Number(adminFieldLongitude.replace(",", "."));
+    if (!adminFieldName.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      Alert.alert("Revisa la pista", "Nombre, latitud y longitud son obligatorios.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const body = JSON.stringify({
+        name: adminFieldName.trim(),
+        address: adminFieldAddress.trim() || null,
+        city: adminFieldCity.trim() || null,
+        latitude,
+        longitude,
+      });
+      const saved = await request<SavedFieldResponse>(
+        adminFieldEditingId ? `/api/fields/${adminFieldEditingId}` : "/api/fields",
+        {
+          method: adminFieldEditingId ? "PUT" : "POST",
+          body,
+        },
+      );
+      await loadSavedFields();
+      selectSavedField(saved);
+      startAdminFieldCreate();
+      setNotice("Pista guardada");
+    } catch (error) {
+      Alert.alert("No se pudo guardar", error instanceof Error ? error.message : "Error inesperado");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteAdminField(field: SavedFieldResponse) {
+    setLoading(true);
+    try {
+      await request(`/api/fields/${field.id}`, { method: "DELETE" });
+      if (selectedSavedFieldId === field.id) {
+        setSelectedSavedFieldId(null);
+      }
+      await loadSavedFields();
+      setNotice("Pista eliminada");
+    } catch (error) {
+      Alert.alert("No se pudo eliminar", error instanceof Error ? error.message : "Error inesperado");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function validateMatchDraft() {
     if (
       !newTitle.trim() ||
@@ -888,13 +1006,16 @@ function AppContent() {
           maxPlayersPerTeam: draft.maxPlayers,
           pricePerPersonCents: draft.pricePerPersonCents,
           coverImageUrl: getRandomMatchCover(),
-          field: {
-            name: newFieldName.trim(),
-            address: newAddress.trim() || null,
-            city: newCity.trim() || null,
-            latitude: newLatitude,
-            longitude: newLongitude,
-          },
+          fieldId: selectedSavedFieldId,
+          field: selectedSavedFieldId
+            ? null
+            : {
+                name: newFieldName.trim(),
+                address: newAddress.trim() || null,
+                city: newCity.trim() || null,
+                latitude: newLatitude,
+                longitude: newLongitude,
+              },
         }),
       });
       await loadMatches();
@@ -1037,6 +1158,7 @@ function AppContent() {
     void sessionStorageAdapter.clear();
     setToken(null);
     setUserName(null);
+    setCurrentUserRole("PLAYER");
     setCurrentUserId(null);
     setMyMatches([]);
     setMessages([]);
@@ -1181,7 +1303,9 @@ function AppContent() {
           <View style={styles.profileHeroCard}>
             <View style={styles.profileGlowMark} />
             <View style={styles.profileHeroTopline}>
-              <Text style={styles.profileEyebrow}>Jugador</Text>
+              <Text style={styles.profileEyebrow}>
+                {isAdmin ? "Administrador" : "Jugador"}
+              </Text>
               <Pressable
                 style={styles.editProfileButton}
                 onPress={() => setProfileEditing((current) => !current)}
@@ -1227,6 +1351,85 @@ function AppContent() {
               <Text style={styles.streakNumber}>{victoryStreak}</Text>
             </View>
           </View>
+
+          {isAdmin ? (
+            <View style={styles.adminPanel}>
+              <View style={styles.adminPanelHeader}>
+                <View>
+                  <Text style={styles.adminEyebrow}>Admin</Text>
+                  <Text style={styles.adminTitle}>Pistas guardadas</Text>
+                </View>
+                <Pressable style={styles.adminMiniButton} onPress={startAdminFieldCreate}>
+                  <Text style={styles.adminMiniButtonText}>Nueva</Text>
+                </Pressable>
+              </View>
+              <Field
+                label="Nombre de pista"
+                value={adminFieldName}
+                onChangeText={setAdminFieldName}
+                placeholder="Campo Municipal"
+              />
+              <Field
+                label="Direccion"
+                value={adminFieldAddress}
+                onChangeText={setAdminFieldAddress}
+                placeholder="Calle, barrio..."
+              />
+              <Field
+                label="Ciudad"
+                value={adminFieldCity}
+                onChangeText={setAdminFieldCity}
+                placeholder="Huelva"
+              />
+              <Field
+                label="Latitud"
+                value={adminFieldLatitude}
+                onChangeText={setAdminFieldLatitude}
+                keyboardType="decimal-pad"
+                placeholder="37.261420"
+              />
+              <Field
+                label="Longitud"
+                value={adminFieldLongitude}
+                onChangeText={setAdminFieldLongitude}
+                keyboardType="decimal-pad"
+                placeholder="-6.944720"
+              />
+              <Pressable
+                style={styles.adminSaveButton}
+                onPress={saveAdminField}
+                disabled={loading}
+              >
+                <Text style={styles.adminSaveButtonText}>
+                  {adminFieldEditingId ? "Guardar pista" : "Anadir pista"}
+                </Text>
+              </Pressable>
+              <View style={styles.adminFieldList}>
+                {savedFields.map((field) => (
+                  <View key={field.id} style={styles.adminFieldItem}>
+                    <View style={styles.adminFieldInfo}>
+                      <Text style={styles.adminFieldName}>{field.name}</Text>
+                      <Text style={styles.adminFieldMeta} numberOfLines={1}>
+                        {field.address || "Sin direccion"} - {field.city || "Sin ciudad"}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.adminIconButton}
+                      onPress={() => startAdminFieldEdit(field)}
+                    >
+                      <Text style={styles.adminIconButtonText}>Editar</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.adminIconButton, styles.adminDangerButton]}
+                      onPress={() => deleteAdminField(field)}
+                    >
+                      <Text style={styles.adminIconButtonText}>Borrar</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : null}
 
           {profileEditing ? (
             <View style={styles.profileEditor}>
@@ -1380,6 +1583,7 @@ function AppContent() {
               city={profile?.city || profileCity || newCity || "Huelva"}
               fieldName={newFieldName}
               onChange={(location, address) => {
+                setSelectedSavedFieldId(null);
                 setNewLatitude(location.latitude);
                 setNewLongitude(location.longitude);
                 if (address) {
@@ -1444,23 +1648,84 @@ function AppContent() {
             <Field
               label="Campo"
               value={newFieldName}
-              onChangeText={setNewFieldName}
+              onChangeText={(value) => {
+                setSelectedSavedFieldId(null);
+                setNewFieldName(value);
+              }}
               placeholder="Nombre del campo"
             />
             <View style={styles.locationCreateCard}>
               <View>
                 <Text style={styles.locationCreateTitle}>Ubicacion</Text>
                 <Text style={styles.locationCreateMeta}>
+                  {selectedSavedFieldId ? "Pista guardada" : "Punto manual"} -{" "}
                   {newLatitude.toFixed(5)}, {newLongitude.toFixed(5)}
                 </Text>
               </View>
               <Pressable
                 style={styles.locationPickButton}
-                onPress={() => setAppTab("location")}
+                onPress={() => {
+                  setSelectedSavedFieldId(null);
+                  setAppTab("location");
+                }}
               >
-                <LocationTargetIcon />
+                <MapPickerIcon />
               </Pressable>
             </View>
+            {savedFields.length > 0 ? (
+              <View style={styles.savedFieldBlock}>
+                <Text style={styles.fieldLabel}>Pistas guardadas</Text>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.savedFieldScroller}
+                >
+                  <Pressable
+                    style={[
+                      styles.savedFieldChip,
+                      !selectedSavedFieldId && styles.savedFieldChipActive,
+                    ]}
+                    onPress={() => selectSavedField(null)}
+                  >
+                    <Text
+                      style={[
+                        styles.savedFieldChipTitle,
+                        !selectedSavedFieldId && styles.savedFieldChipTitleActive,
+                      ]}
+                    >
+                      Punto manual
+                    </Text>
+                    <Text style={styles.savedFieldChipMeta}>Elegir en mapa</Text>
+                  </Pressable>
+                  {savedFields.map((field) => {
+                    const active = selectedSavedFieldId === field.id;
+                    return (
+                      <Pressable
+                        key={field.id}
+                        style={[
+                          styles.savedFieldChip,
+                          active && styles.savedFieldChipActive,
+                        ]}
+                        onPress={() => selectSavedField(field)}
+                      >
+                        <Text
+                          style={[
+                            styles.savedFieldChipTitle,
+                            active && styles.savedFieldChipTitleActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {field.name}
+                        </Text>
+                        <Text style={styles.savedFieldChipMeta} numberOfLines={1}>
+                          {field.city || field.address || "Pista guardada"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            ) : null}
 
             <View style={styles.calendarBlock}>
               <Text style={styles.fieldLabel}>Fecha</Text>
@@ -1613,9 +1878,7 @@ function AppContent() {
 
                   <View style={styles.detailLocationCard}>
                     <View style={styles.detailLocationIcon}>
-                      <View style={styles.detailLocationIconRing}>
-                        <View style={styles.detailLocationIconDot} />
-                      </View>
+                      <LocationTargetIcon />
                     </View>
                     <View style={styles.detailLocationTextWrap}>
                       <Text style={styles.detailLocationTitle} numberOfLines={1}>
@@ -1796,7 +2059,7 @@ function AppContent() {
                           onPress={() => loadMessages(selectedMatch.id)}
                           disabled={loading}
                         >
-                          <Text style={styles.chatIconButtonText}>Actualizar</Text>
+                          <RefreshIcon />
                         </Pressable>
                         <Pressable
                           style={styles.chatCloseButton}
@@ -2229,9 +2492,36 @@ function LogoMark({ size = 42 }: { size?: number }) {
 function LocationTargetIcon() {
   return (
     <View style={styles.locationIcon}>
-      <View style={styles.locationIconPin} />
-      <View style={styles.locationIconInner} />
-      <View style={styles.locationIconStem} />
+      <View style={styles.locationIconPoint} />
+      <View style={styles.locationIconHead}>
+        <View style={styles.locationIconHole} />
+      </View>
+    </View>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <View style={styles.refreshIcon}>
+      <View style={styles.refreshArrowTop}>
+        <View style={styles.refreshArrowHeadTop} />
+      </View>
+      <View style={styles.refreshArrowBottom}>
+        <View style={styles.refreshArrowHeadBottom} />
+      </View>
+    </View>
+  );
+}
+
+function MapPickerIcon() {
+  return (
+    <View style={styles.mapPickerIcon}>
+      <View style={styles.mapPickerRoadOne} />
+      <View style={styles.mapPickerRoadTwo} />
+      <View style={styles.mapPickerPinPoint} />
+      <View style={styles.mapPickerPinHead}>
+        <View style={styles.mapPickerPinHole} />
+      </View>
     </View>
   );
 }
@@ -2852,6 +3142,7 @@ function LocationPickerMap({
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(15);
   const pinchActive = useRef(false);
+  const skipNextCenterSync = useRef(false);
   const lastWheelZoomAt = useRef(0);
 
   useEffect(() => {
@@ -2859,6 +3150,10 @@ function LocationPickerMap({
   }, [dragOffset]);
 
   useEffect(() => {
+    if (skipNextCenterSync.current) {
+      skipNextCenterSync.current = false;
+      return;
+    }
     setCenter(value);
   }, [value.latitude, value.longitude]);
 
@@ -2896,8 +3191,8 @@ function LocationPickerMap({
       y: mapData.topLeft.y + locationY - canvasTop - latestDragOffset.current.y,
     };
     const nextLocation = worldToLatLon(worldPoint, zoom);
+    skipNextCenterSync.current = true;
     onChange(nextLocation);
-    setCenter(nextLocation);
     setDragOffset({ x: 0, y: 0 });
   }
 
@@ -2942,7 +3237,8 @@ function LocationPickerMap({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (event, gesture) =>
           event.nativeEvent.touches.length >= 2 ||
-          Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
+          Math.abs(gesture.dx) > 5 ||
+          Math.abs(gesture.dy) > 5,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event) => {
           movedDuringGesture.current = false;
@@ -2967,31 +3263,24 @@ function LocationPickerMap({
                 Math.log2(distance / pinchStartDistance.current) * 2,
               );
               setZoom(clampMapZoom(pinchStartZoom.current + zoomDelta));
-              setDragOffset({ x: 0, y: 0 });
             }
+            setDragOffset({
+              x: panStart.current.x + gesture.dx,
+              y: panStart.current.y + gesture.dy,
+            });
             return;
           }
 
           pinchActive.current = false;
-          if (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2) {
-            movedDuringGesture.current = true;
-          }
-          setDragOffset({
-            x: panStart.current.x + gesture.dx,
-            y: panStart.current.y + gesture.dy,
-          });
         },
         onPanResponderRelease: (event) => {
           if (pinchActive.current) {
             pinchActive.current = false;
             pinchStartDistance.current = 0;
-            return;
-          }
-          pinchStartDistance.current = 0;
-          if (movedDuringGesture.current) {
             commitDrag(latestDragOffset.current);
             return;
           }
+          pinchStartDistance.current = 0;
           pickPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
         },
       }),
@@ -3064,12 +3353,12 @@ function LocationPickerMap({
             style={[
               styles.locationPickedMarker,
               {
-                left: selectedPoint.left - 17,
-                top: selectedPoint.top - 17,
+                left: selectedPoint.left - 11,
+                top: selectedPoint.top - 25,
               },
             ]}
           >
-            <View style={styles.locationPickedDot} />
+            <LocationTargetIcon />
           </View>
         </View>
       </View>
@@ -4401,7 +4690,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
   },
-  modeButtonActive: { backgroundColor: "#8FEA6A" },
+  modeButtonActive: {
+    backgroundColor: "rgba(127,239,155,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(127,239,155,0.38)",
+  },
   modeIconBox: {
     width: 18,
     height: 18,
@@ -4420,7 +4713,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#8FEA6A",
+    backgroundColor: "#7FEF9B",
   },
   modeListLine: {
     width: 16,
@@ -4447,7 +4740,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "900",
   },
-  modeTextActive: { color: "#0A110E" },
+  modeTextActive: { color: "#F7F1E8" },
   fieldBlock: { gap: 5 },
   fieldLabel: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
   input: {
@@ -4805,50 +5098,107 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 16,
     right: 16,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(247,241,232,0.94)",
+    width: 50,
+    height: 50,
+    borderRadius: 21,
+    backgroundColor: "rgba(7,16,10,0.92)",
     borderWidth: 1,
-    borderColor: "rgba(10,17,14,0.10)",
+    borderColor: "rgba(247,241,232,0.16)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#000000",
-    shadowOpacity: 0.24,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.30,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
     zIndex: 18,
   },
   locationIcon: {
-    width: 26,
+    width: 22,
     height: 26,
     alignItems: "center",
     justifyContent: "center",
   },
-  locationIconPin: {
+  locationIconHead: {
+    position: "absolute",
+    width: 16,
+    height: 19,
+    borderRadius: 8,
+    backgroundColor: "#149BFF",
+    alignItems: "center",
+    justifyContent: "center",
+    top: 1,
+    zIndex: 2,
+  },
+  locationIconPoint: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    top: 18,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 7,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#149BFF",
+    zIndex: 1,
+  },
+  locationIconHole: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#07100A",
+  },
+  mapPickerIcon: {
+    width: 28,
+    height: 26,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mapPickerRoadOne: {
+    position: "absolute",
+    width: 25,
+    height: 15,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "rgba(184,255,208,0.95)",
+    transform: [{ rotate: "-14deg" }],
+  },
+  mapPickerRoadTwo: {
     position: "absolute",
     width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#0A110E",
-    top: 1,
-  },
-  locationIconInner: {
-    position: "absolute",
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#F7F1E8",
-    top: 7,
-  },
-  locationIconStem: {
-    position: "absolute",
-    width: 10,
     height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "rgba(127,239,155,0.58)",
+    transform: [{ rotate: "18deg" }],
+  },
+  mapPickerPinHead: {
+    position: "absolute",
+    width: 13,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#7FEF9B",
+    alignItems: "center",
+    justifyContent: "center",
+    top: 3,
+  },
+  mapPickerPinPoint: {
+    position: "absolute",
+    width: 0,
+    height: 0,
+    top: 16,
+    borderLeftWidth: 4,
+    borderRightWidth: 4,
+    borderTopWidth: 6,
+    borderLeftColor: "transparent",
+    borderRightColor: "transparent",
+    borderTopColor: "#7FEF9B",
+  },
+  mapPickerPinHole: {
+    width: 4,
+    height: 4,
     borderRadius: 2,
-    backgroundColor: "#0A110E",
-    bottom: 2,
-    transform: [{ rotate: "45deg" }],
+    backgroundColor: "#07100A",
   },
   mapZoomControls: {
     position: "absolute",
@@ -4903,46 +5253,48 @@ const styles = StyleSheet.create({
   mapLoadingText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   mapMarkerWrap: {
     position: "absolute",
-    width: 46,
-    height: 46,
+    width: 28,
+    height: 28,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 12,
   },
   mapMarkerHalo: {
     position: "absolute",
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(143,234,106,0.18)",
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(127,239,155,0.10)",
     borderWidth: 1,
-    borderColor: "rgba(143,234,106,0.28)",
+    borderColor: "rgba(127,239,155,0.22)",
   },
   mapMarkerHaloActive: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "rgba(143,234,106,0.24)",
-    borderColor: "#8FEA6A",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(127,239,155,0.18)",
+    borderColor: "#7FEF9B",
   },
   mapMarkerPin: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: "#8FEA6A",
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#7FEF9B",
     borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   mapMarkerPinActive: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "#8FEA6A",
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#B8FFD0",
   },
   mapMarkerDot: {
-    width: 0,
-    height: 0,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#0A110E",
   },
   popupCard: {
     position: "absolute",
@@ -5087,9 +5439,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterButtonActive: { backgroundColor: "#8FEA6A" },
+  filterButtonActive: {
+    backgroundColor: "rgba(127,239,155,0.20)",
+    borderWidth: 1,
+    borderColor: "rgba(127,239,155,0.36)",
+  },
   filterButtonText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
-  filterButtonTextActive: { color: "#0A110E" },
+  filterButtonTextActive: { color: "#F7F1E8" },
   listStatsRow: { flexDirection: "row", gap: 12 },
   listStat: {
     flex: 1,
@@ -5128,7 +5484,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(10,17,14,0.56)",
   },
   listCardPressArea: { gap: 6 },
-  listCardSelected: { borderWidth: 2, borderColor: "#8FEA6A" },
+  listCardSelected: {
+    borderWidth: 2,
+    borderColor: "#7FEF9B",
+    shadowColor: "#7FEF9B",
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 17, fontWeight: "900" },
   statusPill: {
@@ -5518,6 +5881,76 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     lineHeight: 17,
   },
+  adminPanel: {
+    backgroundColor: "rgba(7,12,9,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(127,239,155,0.22)",
+    borderRadius: 24,
+    padding: 14,
+    gap: 12,
+  },
+  adminPanelHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  adminEyebrow: {
+    color: "#7FEF9B",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  adminTitle: { color: "#F7F1E8", fontSize: 20, fontWeight: "900" },
+  adminMiniButton: {
+    minHeight: 38,
+    borderRadius: 17,
+    backgroundColor: "rgba(127,239,155,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(127,239,155,0.34)",
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminMiniButtonText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  adminSaveButton: {
+    minHeight: 48,
+    borderRadius: 20,
+    backgroundColor: "#7FEF9B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminSaveButtonText: { color: "#07100A", fontWeight: "900" },
+  adminFieldList: { gap: 8 },
+  adminFieldItem: {
+    minHeight: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  adminFieldInfo: { flex: 1 },
+  adminFieldName: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
+  adminFieldMeta: {
+    color: "rgba(247,241,232,0.62)",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  adminIconButton: {
+    minHeight: 34,
+    borderRadius: 14,
+    backgroundColor: "rgba(127,239,155,0.16)",
+    paddingHorizontal: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminDangerButton: { backgroundColor: "rgba(217,88,88,0.24)" },
+  adminIconButtonText: { color: "#F7F1E8", fontSize: 10, fontWeight: "900" },
   profileEditor: {
     backgroundColor: "rgba(7,12,9,0.92)",
     borderWidth: 1,
@@ -5665,20 +6098,10 @@ const styles = StyleSheet.create({
   locationPickerZoom: { position: "absolute", right: 18, top: 70, gap: 8 },
   locationPickedMarker: {
     position: "absolute",
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#8FEA6A",
-    borderWidth: 4,
-    borderColor: "rgba(10,17,14,0.88)",
+    width: 22,
+    height: 26,
     alignItems: "center",
     justifyContent: "center",
-  },
-  locationPickedDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#F7F1E8",
   },
   locationSummaryCard: {
     borderRadius: 18,
@@ -5762,6 +6185,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   locationPickText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
+  savedFieldBlock: { gap: 8 },
+  savedFieldScroller: { gap: 8, paddingRight: 4 },
+  savedFieldChip: {
+    width: 150,
+    minHeight: 64,
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 10,
+    justifyContent: "center",
+  },
+  savedFieldChipActive: {
+    backgroundColor: "rgba(127,239,155,0.18)",
+    borderColor: "rgba(127,239,155,0.42)",
+  },
+  savedFieldChipTitle: {
+    color: "#E3DBD0",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  savedFieldChipTitleActive: { color: "#F7F1E8" },
+  savedFieldChipMeta: {
+    color: "rgba(227,219,208,0.62)",
+    fontSize: 10,
+    fontWeight: "800",
+    marginTop: 4,
+  },
   formRow: { flexDirection: "row", gap: 10 },
   formHalf: { flex: 1 },
   calendarBlock: { gap: 7 },
@@ -6124,24 +6575,11 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#8FEA6A",
+    backgroundColor: "rgba(7,16,10,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.35)",
     alignItems: "center",
     justifyContent: "center",
-  },
-  detailLocationIconRing: {
-    width: 21,
-    height: 21,
-    borderRadius: 11,
-    borderWidth: 3,
-    borderColor: "#0A110E",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  detailLocationIconDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#0A110E",
   },
   detailLocationTextWrap: { flex: 1, gap: 3 },
   detailLocationTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
@@ -6404,19 +6842,64 @@ const styles = StyleSheet.create({
   chatTitle: { color: "#F7F1E8", fontSize: 28, fontWeight: "900" },
   chatHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   chatIconButton: {
-    minHeight: 38,
+    width: 42,
+    height: 42,
     borderRadius: 18,
-    backgroundColor: "rgba(247,241,232,0.10)",
+    backgroundColor: "rgba(127,239,155,0.14)",
     borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.12)",
+    borderColor: "rgba(127,239,155,0.24)",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
   },
-  chatIconButtonText: {
-    color: "#F7F1E8",
-    fontSize: 11,
-    fontWeight: "900",
+  refreshIcon: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  refreshArrowTop: {
+    position: "absolute",
+    width: 14,
+    height: 8,
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: "#7FEF9B",
+    borderTopLeftRadius: 9,
+    left: 3,
+    top: 4,
+  },
+  refreshArrowHeadTop: {
+    position: "absolute",
+    width: 7,
+    height: 7,
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#7FEF9B",
+    right: -2,
+    top: -5,
+    transform: [{ rotate: "45deg" }],
+  },
+  refreshArrowBottom: {
+    position: "absolute",
+    width: 14,
+    height: 8,
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderColor: "#7FEF9B",
+    borderBottomRightRadius: 9,
+    right: 3,
+    bottom: 4,
+  },
+  refreshArrowHeadBottom: {
+    position: "absolute",
+    width: 7,
+    height: 7,
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderColor: "#7FEF9B",
+    left: -2,
+    bottom: -5,
+    transform: [{ rotate: "45deg" }],
   },
   chatCloseButton: {
     minHeight: 38,

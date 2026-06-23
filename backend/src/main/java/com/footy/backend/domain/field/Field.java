@@ -35,6 +35,9 @@ public class Field extends AuditableEntity {
     @Column(precision = 9, scale = 6)
     private BigDecimal longitude;
 
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private boolean savedField = false;
+
     protected Field() {
     }
 
@@ -68,5 +71,25 @@ public class Field extends AuditableEntity {
 
     public BigDecimal getLongitude() {
         return longitude;
+    }
+
+    public boolean isSavedField() {
+        return savedField;
+    }
+
+    public void markSaved() {
+        this.savedField = true;
+    }
+
+    public void unmarkSaved() {
+        this.savedField = false;
+    }
+
+    public void update(String name, String address, String city, BigDecimal latitude, BigDecimal longitude) {
+        this.name = name;
+        this.address = address;
+        this.city = city;
+        this.latitude = latitude;
+        this.longitude = longitude;
     }
 }

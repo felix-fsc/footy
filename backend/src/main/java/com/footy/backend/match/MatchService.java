@@ -69,7 +69,7 @@ public class MatchService {
     public MatchResponse createMatch(UUID currentUserId, CreateMatchRequest request) {
         User creator = getUserOrUnauthorized(currentUserId);
 
-        Field field = createField(request.field());
+        Field field = resolveField(request);
         Match match = new Match(
                 request.title().trim(),
                 field,
@@ -192,6 +192,18 @@ public class MatchService {
         if (match.getField() != null) {
             match.getField().getName();
         }
+    }
+
+    private Field resolveField(CreateMatchRequest request) {
+        if (request.fieldId() != null) {
+            Field field = fieldRepository.findById(request.fieldId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Field not found"));
+            if (!field.isSavedField()) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Field not found");
+            }
+            return field;
+        }
+        return createField(request.field());
     }
 
     private Field createField(CreateFieldRequest request) {

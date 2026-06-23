@@ -1,6 +1,7 @@
 package com.footy.backend.match;
 
 import java.time.Instant;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Future;
@@ -16,5 +17,6 @@ public record CreateMatchRequest(
         @Min(1) @Max(11) int maxPlayersPerTeam,
         @Min(0) @Max(10000) int pricePerPersonCents,
         @Size(max = 500) String coverImageUrl,
+        UUID fieldId,
         @Valid CreateFieldRequest field) {
 }

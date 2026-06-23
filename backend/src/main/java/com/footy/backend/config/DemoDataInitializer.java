@@ -18,6 +18,7 @@ import com.footy.backend.domain.match.Match;
 import com.footy.backend.domain.match.MatchRepository;
 import com.footy.backend.domain.user.User;
 import com.footy.backend.domain.user.UserRepository;
+import com.footy.backend.domain.user.UserRole;
 
 @Component
 @Profile("!test")
@@ -51,6 +52,7 @@ public class DemoDataInitializer implements ApplicationRunner {
         if (organizer.getUsername() == null || organizer.getUsername().isBlank()) {
             organizer.setUsername("demo_footy");
         }
+        organizer.setRole(UserRole.ADMIN);
         backfillUsernames();
 
         matchRepository.findAll().stream()
@@ -66,6 +68,8 @@ public class DemoDataInitializer implements ApplicationRunner {
                 new DemoMatch("Footy Huelva - Los Rosales", "Campo Municipal Los Rosales", "Barriada Los Rosales", "Huelva", "37.270550", "-6.931760", 4, 21, 6, 375, "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1000&q=72"),
                 new DemoMatch("Footy Huelva - Diego Lobato", "Polideportivo Municipal Diego Lobato", "Calle Artesanos", "Huelva", "37.273950", "-6.936850", 2, 17, 5, 325, "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1000&q=72"),
                 new DemoMatch("Footy Huelva - Saladillo", "Campo Municipal Saladillo", "Calle Hermanos Alvarez Quintero 13", "Huelva", "37.261420", "-6.944720", 5, 11, 7, 450, "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1000&q=72"));
+
+        seedSavedFields(demoMatches);
 
         for (DemoMatch demoMatch : demoMatches) {
             Match existingMatch = matchRepository.findByTitle(demoMatch.title()).orElse(null);
@@ -108,6 +112,26 @@ public class DemoDataInitializer implements ApplicationRunner {
             int maxPlayersPerTeam,
             int pricePerPersonCents,
             String coverImageUrl) {
+    }
+
+    private void seedSavedFields(List<DemoMatch> demoMatches) {
+        List<Field> savedFields = fieldRepository.findAllBySavedFieldTrueOrderByCityAscNameAsc();
+        for (DemoMatch demoMatch : demoMatches) {
+            boolean exists = savedFields.stream()
+                    .anyMatch(field -> demoMatch.fieldName().equalsIgnoreCase(field.getName())
+                            && demoMatch.city().equalsIgnoreCase(field.getCity()));
+            if (exists) {
+                continue;
+            }
+            Field field = new Field(
+                    demoMatch.fieldName(),
+                    demoMatch.address(),
+                    demoMatch.city(),
+                    new BigDecimal(demoMatch.latitude()),
+                    new BigDecimal(demoMatch.longitude()));
+            field.markSaved();
+            fieldRepository.save(field);
+        }
     }
 
     private void backfillUsernames() {
