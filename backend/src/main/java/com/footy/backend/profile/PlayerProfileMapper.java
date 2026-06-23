@@ -11,7 +11,9 @@ final class PlayerProfileMapper {
     static PlayerProfileResponse toResponse(User user, PlayerProfile profile) {
         return new PlayerProfileResponse(
                 profile == null ? null : profile.getId(),
+                user.getId(),
                 user.getDisplayName(),
+                user.getUsername(),
                 user.getEmail(),
                 profile == null ? null : profile.getFullName(),
                 profile == null ? null : profile.getBio(),

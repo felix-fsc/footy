@@ -9,6 +9,7 @@ public record MatchPlayerResponse(
         UUID participationId,
         UUID userId,
         String displayName,
+        String username,
         TeamSide teamSide,
         Instant joinedAt) {
 }

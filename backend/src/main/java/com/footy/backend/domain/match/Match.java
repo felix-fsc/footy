@@ -40,6 +40,12 @@ public class Match extends AuditableEntity {
     @Column(nullable = false)
     private int maxPlayersPerTeam;
 
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int pricePerPersonCents;
+
+    @Column(length = 500)
+    private String coverImageUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private MatchStatus status = MatchStatus.OPEN;
@@ -51,11 +57,13 @@ public class Match extends AuditableEntity {
     protected Match() {
     }
 
-    public Match(String title, Field field, Instant startsAt, int maxPlayersPerTeam, User createdBy) {
+    public Match(String title, Field field, Instant startsAt, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl, User createdBy) {
         this.title = title;
         this.field = field;
         this.startsAt = startsAt;
         this.maxPlayersPerTeam = maxPlayersPerTeam;
+        this.pricePerPersonCents = pricePerPersonCents;
+        this.coverImageUrl = coverImageUrl;
         this.createdBy = createdBy;
     }
 
@@ -79,6 +87,22 @@ public class Match extends AuditableEntity {
         return maxPlayersPerTeam;
     }
 
+    public int getPricePerPersonCents() {
+        return pricePerPersonCents;
+    }
+
+    public void setPricePerPersonCents(int pricePerPersonCents) {
+        this.pricePerPersonCents = pricePerPersonCents;
+    }
+
+    public String getCoverImageUrl() {
+        return coverImageUrl;
+    }
+
+    public void setCoverImageUrl(String coverImageUrl) {
+        this.coverImageUrl = coverImageUrl;
+    }
+
     public MatchStatus getStatus() {
         return status;
     }
@@ -89,5 +113,13 @@ public class Match extends AuditableEntity {
 
     public void cancel() {
         this.status = MatchStatus.CANCELLED;
+    }
+
+    public void markFull() {
+        this.status = MatchStatus.FULL;
+    }
+
+    public void reopen() {
+        this.status = MatchStatus.OPEN;
     }
 }

@@ -5,6 +5,7 @@ import com.footy.backend.domain.user.PlayerPosition;
 import jakarta.validation.constraints.Size;
 
 public record UpdatePlayerProfileRequest(
+        @Size(min = 3, max = 30) String username,
         @Size(max = 120) String fullName,
         @Size(max = 500) String bio,
         PlayerPosition preferredPosition,

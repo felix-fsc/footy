@@ -10,6 +10,8 @@ public record MatchResponse(
         String title,
         Instant startsAt,
         int maxPlayersPerTeam,
+        int pricePerPersonCents,
+        String coverImageUrl,
         MatchStatus status,
         MatchCreatorResponse createdBy,
         FieldResponse field,

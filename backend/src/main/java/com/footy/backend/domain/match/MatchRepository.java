@@ -1,6 +1,7 @@
 package com.footy.backend.domain.match;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -10,8 +11,13 @@ public interface MatchRepository extends JpaRepository<Match, UUID> {
 
     boolean existsByTitle(String title);
 
+    Optional<Match> findByTitle(String title);
+
     @EntityGraph(attributePaths = {"field", "createdBy"})
     List<Match> findAllByStatusOrderByStartsAtAsc(MatchStatus status);
+
+    @EntityGraph(attributePaths = {"field", "createdBy"})
+    List<Match> findAllByStatusInOrderByStartsAtAsc(List<MatchStatus> statuses);
 
     @EntityGraph(attributePaths = {"field", "createdBy"})
     List<Match> findAllByCreatedByIdOrderByStartsAtAsc(UUID createdById);

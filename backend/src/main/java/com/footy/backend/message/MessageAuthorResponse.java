@@ -4,5 +4,6 @@ import java.util.UUID;
 
 public record MessageAuthorResponse(
         UUID id,
-        String displayName) {
+        String displayName,
+        String username) {
 }

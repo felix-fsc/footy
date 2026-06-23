@@ -22,8 +22,13 @@ import {
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Image,
   ImageBackground,
+  Linking,
+  Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   PanResponder,
   Platform,
   Pressable,
@@ -54,6 +59,7 @@ type AuthResponse = {
     id: string;
     email: string;
     displayName: string;
+    username?: string | null;
   };
 };
 
@@ -67,6 +73,7 @@ type MatchPlayerResponse = {
   participationId: string;
   userId: string;
   displayName: string;
+  username?: string | null;
   teamSide: TeamSide;
   joinedAt: string;
 };
@@ -76,10 +83,13 @@ type MatchResponse = {
   title: string;
   startsAt: string;
   maxPlayersPerTeam: number;
+  pricePerPersonCents: number;
+  coverImageUrl?: string | null;
   status: string;
   createdBy: {
     id: string;
     displayName: string;
+    username?: string | null;
   };
   field: null | {
     id: string;
@@ -109,6 +119,7 @@ type MessageResponse = {
   author: {
     id: string;
     displayName: string;
+    username?: string | null;
   };
   content: string;
   sentAt: string;
@@ -116,7 +127,9 @@ type MessageResponse = {
 
 type PlayerProfileResponse = {
   id: string | null;
+  userId?: string | null;
   displayName: string;
+  username?: string | null;
   email: string;
   fullName: string | null;
   bio: string | null;
@@ -131,6 +144,25 @@ const API_BASE_URL =
 
 const SESSION_STORAGE_KEY = "footy.session.v1";
 const INTRO_VIDEO = require("./assets/intro.mp4");
+const MATCH_COVER_IMAGES = [
+  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1504016798967-59a258e9386d?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1535131749006-b7f58c99034b?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1000&q=72",
+  "https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=1000&q=72",
+];
+const DEFAULT_MATCH_COVER = MATCH_COVER_IMAGES[0];
 
 declare const process: {
   env: {
@@ -215,7 +247,7 @@ async function requestAppPermissions() {
         name: "Footy",
         importance: Notifications.AndroidImportance.DEFAULT,
         vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#B3F351",
+        lightColor: "#8FEA6A",
       });
     }
 
@@ -293,13 +325,64 @@ const MAP_MIN_ZOOM = 11;
 const MAP_MAX_ZOOM = 17;
 const DEFAULT_MAP_CENTER = { latitude: 37.26142, longitude: -6.94472 };
 
-function tomorrowDateParts() {
+function datePartsFromOffset(daysFromToday: number) {
   const date = new Date();
-  date.setDate(date.getDate() + 1);
+  date.setDate(date.getDate() + daysFromToday);
   const yyyy = date.getFullYear();
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function tomorrowDateParts() {
+  return datePartsFromOffset(1);
+}
+
+function monthDateParts(year: number, month: number, day: number) {
+  const yyyy = String(year);
+  const mm = String(month + 1).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function getCalendarMonth(offset: number) {
+  const date = new Date();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + offset);
+  return { year: date.getFullYear(), month: date.getMonth() };
+}
+
+function formatPriceFromCents(value: number | null | undefined) {
+  const cents = value ?? 0;
+  if (cents <= 0) {
+    return "Gratis";
+  }
+  return `${(cents / 100).toFixed(2)} EUR`;
+}
+
+function formatDraftPrice(value: string) {
+  const price = Number(value.replace(",", "."));
+  if (!Number.isFinite(price) || price <= 0) {
+    return "Gratis";
+  }
+  return `${price.toFixed(2)} EUR`;
+}
+
+function getRandomMatchCover() {
+  const index = Math.floor(Math.random() * MATCH_COVER_IMAGES.length);
+  return MATCH_COVER_IMAGES[index] ?? DEFAULT_MATCH_COVER;
+}
+
+function getMatchCover(match: MatchResponse) {
+  return match.coverImageUrl || DEFAULT_MATCH_COVER;
+}
+
+function publicHandle(user?: { displayName?: string | null; username?: string | null }) {
+  const username = user?.username?.trim();
+  if (username) {
+    return `@${username}`;
+  }
+  return user?.displayName?.trim() || "Jugador";
 }
 
 export default function App() {
@@ -327,13 +410,17 @@ function AppContent() {
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [messageText, setMessageText] = useState("");
+  const [showMatchChat, setShowMatchChat] = useState(false);
   const [loading, setLoading] = useState(false);
   const [restoringSession, setRestoringSession] = useState(true);
   const [showIntroVideo, setShowIntroVideo] = useState(true);
   const [notice, setNotice] = useState("Conectado a localhost:8080");
   const [searchQuery, setSearchQuery] = useState("");
   const [profile, setProfile] = useState<PlayerProfileResponse | null>(null);
+  const [publicProfile, setPublicProfile] = useState<PlayerProfileResponse | null>(null);
+  const [showPublicProfile, setShowPublicProfile] = useState(false);
   const [profileFullName, setProfileFullName] = useState("");
+  const [profileUsername, setProfileUsername] = useState("");
   const [profileCity, setProfileCity] = useState("");
   const [profileBio, setProfileBio] = useState("");
   const [profilePosition, setProfilePosition] =
@@ -355,8 +442,11 @@ function AppContent() {
   const [newDate, setNewDate] = useState(tomorrowDateParts());
   const [newTime, setNewTime] = useState("19:00");
   const [newMaxPlayers, setNewMaxPlayers] = useState("5");
+  const [newPricePerPerson, setNewPricePerPerson] = useState("3.50");
   const [newLatitude, setNewLatitude] = useState(37.26142);
   const [newLongitude, setNewLongitude] = useState(-6.94472);
+  const [showCreatePreview, setShowCreatePreview] = useState(false);
+  const [showCreateCalendar, setShowCreateCalendar] = useState(false);
 
   const isLoggedIn = Boolean(token);
   const visibleMatches = useMemo(() => {
@@ -540,6 +630,10 @@ function AppContent() {
   }, [appTab, loadMessages, selectedMatchId]);
 
   useEffect(() => {
+    setShowMatchChat(false);
+  }, [selectedMatchId]);
+
+  useEffect(() => {
     if (!token || restoringSession) {
       return;
     }
@@ -547,9 +641,60 @@ function AppContent() {
     loadProfile().catch(() => setNotice("No se pudo cargar el perfil"));
   }, [token, restoringSession]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (showPublicProfile) {
+          setShowPublicProfile(false);
+          return true;
+        }
+        if (showMatchChat) {
+          setShowMatchChat(false);
+          return true;
+        }
+        if (showCreatePreview) {
+          setShowCreatePreview(false);
+          return true;
+        }
+        if (showCreateCalendar) {
+          setShowCreateCalendar(false);
+          return true;
+        }
+        if (profileEditing) {
+          setProfileEditing(false);
+          return true;
+        }
+        if (appTab === "location") {
+          setAppTab("create");
+          return true;
+        }
+        if (appTab === "detail" || appTab === "create" || appTab === "profile") {
+          goHome();
+          return true;
+        }
+        return false;
+      },
+    );
+
+    return () => subscription.remove();
+  }, [
+    appTab,
+    profileEditing,
+    showCreateCalendar,
+    showCreatePreview,
+    showMatchChat,
+    showPublicProfile,
+  ]);
+
   function applyProfile(nextProfile: PlayerProfileResponse) {
     setProfile(nextProfile);
     setProfileFullName(nextProfile.fullName ?? nextProfile.displayName ?? "");
+    setProfileUsername(nextProfile.username ?? "");
     setProfileCity(nextProfile.city ?? "");
     setProfileBio(nextProfile.bio ?? "");
     setProfilePosition(nextProfile.preferredPosition ?? "MIDFIELDER");
@@ -568,6 +713,7 @@ function AppContent() {
         {
           method: "PUT",
           body: JSON.stringify({
+            username: profileUsername,
             fullName: profileFullName,
             city: profileCity,
             bio: profileBio,
@@ -582,6 +728,24 @@ function AppContent() {
         "No se pudo guardar",
         error instanceof Error ? error.message : "Error inesperado",
       );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openPublicProfile(userId: string) {
+    if (!userId) {
+      return;
+    }
+    try {
+      setLoading(true);
+      const nextProfile = await request<PlayerProfileResponse>(
+        `/api/profile/${userId}`,
+      );
+      setPublicProfile(nextProfile);
+      setShowPublicProfile(true);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "No se pudo abrir el perfil");
     } finally {
       setLoading(false);
     }
@@ -666,7 +830,7 @@ function AppContent() {
     }
   }
 
-  async function createMatch() {
+  function validateMatchDraft() {
     if (
       !newTitle.trim() ||
       !newFieldName.trim() ||
@@ -674,7 +838,7 @@ function AppContent() {
       !newTime.trim()
     ) {
       Alert.alert("Faltan datos", "Completa titulo, campo, fecha y hora.");
-      return;
+      return null;
     }
 
     const maxPlayers = Number(newMaxPlayers);
@@ -683,6 +847,34 @@ function AppContent() {
         "Revisa plazas",
         "El maximo por equipo debe estar entre 1 y 11.",
       );
+      return null;
+    }
+
+    const priceValue = Number(newPricePerPerson.replace(",", "."));
+    if (!Number.isFinite(priceValue) || priceValue < 0 || priceValue > 100) {
+      Alert.alert(
+        "Revisa el precio",
+        "El precio por persona debe estar entre 0 y 100 euros.",
+      );
+      return null;
+    }
+
+    return {
+      maxPlayers,
+      pricePerPersonCents: Math.round(priceValue * 100),
+    };
+  }
+
+  function openCreatePreview() {
+    if (!validateMatchDraft()) {
+      return;
+    }
+    setShowCreatePreview(true);
+  }
+
+  async function createMatch() {
+    const draft = validateMatchDraft();
+    if (!draft) {
       return;
     }
 
@@ -693,7 +885,9 @@ function AppContent() {
         body: JSON.stringify({
           title: newTitle.trim(),
           startsAt: new Date(`${newDate}T${newTime}:00`).toISOString(),
-          maxPlayersPerTeam: maxPlayers,
+          maxPlayersPerTeam: draft.maxPlayers,
+          pricePerPersonCents: draft.pricePerPersonCents,
+          coverImageUrl: getRandomMatchCover(),
           field: {
             name: newFieldName.trim(),
             address: newAddress.trim() || null,
@@ -706,6 +900,7 @@ function AppContent() {
       await loadMatches();
       setSelectedMatchId(created.id);
       setNotice("Partido creado");
+      setShowCreatePreview(false);
       setAppTab("detail");
     } catch (error) {
       Alert.alert(
@@ -811,6 +1006,28 @@ function AppContent() {
     setAppTab("detail");
   }
 
+  async function openDirections(match: MatchResponse) {
+    const location = getMatchLocation(match);
+    const fallbackQuery = [
+      match.field?.name,
+      match.field?.address,
+      match.field?.city,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    const query = location
+      ? `${location.latitude},${location.longitude}`
+      : fallbackQuery;
+
+    if (!query) {
+      Alert.alert("Ubicacion no disponible", "Este partido no tiene destino.");
+      return;
+    }
+
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
+    await Linking.openURL(url);
+  }
+
   function goHome() {
     setSelectedMatchId(null);
     setAppTab("home");
@@ -836,9 +1053,9 @@ function AppContent() {
     return (
       <SafeAreaView style={styles.darkScreen}>
         <StatusBar style="light" />
-      <ScreenBubbles />
+        <ScreenBubbles />
         <View style={styles.loadingScreen}>
-          <ActivityIndicator color="#B3F351" />
+          <ActivityIndicator color="#8FEA6A" />
           <Text style={styles.loadingText}>Cargando sesion</Text>
         </View>
       </SafeAreaView>
@@ -964,14 +1181,12 @@ function AppContent() {
           <View style={styles.profileHeroCard}>
             <View style={styles.profileGlowMark} />
             <View style={styles.profileHeroTopline}>
-              <Text style={styles.profileEyebrow}>Jugador Footy</Text>
+              <Text style={styles.profileEyebrow}>Jugador</Text>
               <Pressable
                 style={styles.editProfileButton}
                 onPress={() => setProfileEditing((current) => !current)}
               >
-                <Text style={styles.editProfileText}>
-                  {profileEditing ? "Cerrar" : "Cambiar informacion"}
-                </Text>
+                <EditProfileIcon active={profileEditing} />
               </Pressable>
             </View>
             <View style={styles.profileHeroBody}>
@@ -988,14 +1203,16 @@ function AppContent() {
                 <Text style={styles.profileName}>
                   {profile?.fullName || userName || "Jugador Footy"}
                 </Text>
+                <Text style={styles.profileHandle}>
+                  {publicHandle(profile ?? { displayName: userName })}
+                </Text>
                 <Text style={styles.profileMeta}>
                   {profile?.city || profileCity || "Ciudad pendiente"} -{" "}
                   {positionLabel(profile?.preferredPosition ?? profilePosition)}
                 </Text>
-                <Text style={styles.profileBioText}>
-                  {profile?.bio ||
-                    "Completa tu perfil para que otros jugadores sepan como juegas y cuando sueles estar disponible."}
-                </Text>
+                {profile?.bio ? (
+                  <Text style={styles.profileBioText}>{profile.bio}</Text>
+                ) : null}
               </View>
             </View>
             <View style={styles.streakBanner}>
@@ -1014,8 +1231,15 @@ function AppContent() {
           {profileEditing ? (
             <View style={styles.profileEditor}>
               <Text style={styles.profileSectionTitle}>
-                Cambiar informacion
+                Editar perfil
               </Text>
+              <Field
+                label="Usuario"
+                value={profileUsername}
+                onChangeText={setProfileUsername}
+                placeholder="tu_usuario"
+                autoCapitalize="none"
+              />
               <Field
                 label="Nombre completo"
                 value={profileFullName}
@@ -1191,15 +1415,14 @@ function AppContent() {
             styles.createContent,
             {
               paddingTop: safeInsets.top + 18,
-              paddingBottom: safeInsets.bottom + 112,
+              paddingBottom: safeInsets.bottom + 116,
             },
           ]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.screenHeader}>
             <View>
-              <Text style={styles.smallLabel}>Nuevo partido</Text>
-              <Text style={styles.screenTitle}>Crear</Text>
+              <Text style={styles.screenTitle}>Nuevo partido</Text>
             </View>
             <Pressable
               style={styles.closePill}
@@ -1210,6 +1433,8 @@ function AppContent() {
           </View>
 
           <View style={styles.createCard}>
+            <View style={styles.createCardBubbleOne} />
+            <View style={styles.createCardBubbleTwo} />
             <Field
               label="Titulo"
               value={newTitle}
@@ -1233,48 +1458,79 @@ function AppContent() {
                 style={styles.locationPickButton}
                 onPress={() => setAppTab("location")}
               >
-                <Text style={styles.locationPickText}>Elegir en mapa</Text>
+                <LocationTargetIcon />
               </Pressable>
             </View>
 
-            <View style={styles.formRow}>
-              <View style={styles.formHalf}>
-                <Field
-                  label="Fecha"
+            <View style={styles.calendarBlock}>
+              <Text style={styles.fieldLabel}>Fecha</Text>
+              <Pressable
+                style={styles.dateSelectorCard}
+                onPress={() => setShowCreateCalendar((current) => !current)}
+              >
+                <View>
+                  <Text style={styles.dateSelectorLabel}>Fecha elegida</Text>
+                  <Text style={styles.dateSelectorValue}>{newDate}</Text>
+                </View>
+                <Text style={styles.dateSelectorAction}>
+                  {showCreateCalendar ? "Ocultar" : "Cambiar"}
+                </Text>
+              </Pressable>
+              {showCreateCalendar ? (
+                <CalendarPicker
                   value={newDate}
-                  onChangeText={setNewDate}
-                  placeholder="YYYY-MM-DD"
+                  onChange={(value) => {
+                    setNewDate(value);
+                    setShowCreateCalendar(false);
+                  }}
                 />
-              </View>
-              <View style={styles.formHalf}>
-                <Field
-                  label="Hora"
-                  value={newTime}
-                  onChangeText={setNewTime}
-                  placeholder="HH:mm"
-                />
+              ) : null}
+            </View>
+            <TimeWheel value={newTime} onChange={setNewTime} />
+            <View style={styles.choiceBlock}>
+              <Text style={styles.fieldLabel}>Jugadores por equipo</Text>
+              <View style={styles.quickChipRow}>
+                {["5", "7", "11"].map((players) => (
+                  <QuickChip
+                    key={players}
+                    label={`${players} vs ${players}`}
+                    active={newMaxPlayers === players}
+                    onPress={() => setNewMaxPlayers(players)}
+                  />
+                ))}
               </View>
             </View>
             <Field
-              label="Jugadores por equipo"
-              value={newMaxPlayers}
-              onChangeText={setNewMaxPlayers}
-              keyboardType="number-pad"
-              placeholder="5"
+              label="Precio por persona"
+              value={newPricePerPerson}
+              onChangeText={setNewPricePerPerson}
+              keyboardType="decimal-pad"
+              placeholder="3.50"
             />
             <Pressable
-              style={styles.authButton}
-              onPress={createMatch}
+              style={styles.createPreviewButton}
+              onPress={openCreatePreview}
               disabled={loading}
             >
-              {loading ? (
-                <ActivityIndicator color="#0A110E" />
-              ) : (
-                <Text style={styles.authButtonText}>Crear partido</Text>
-              )}
+              <Text style={styles.createPreviewButtonText}>Ver vista previa</Text>
             </Pressable>
           </View>
         </ScrollView>
+        <CreatePreviewModal
+          visible={showCreatePreview}
+          loading={loading}
+          title={newTitle}
+          fieldName={newFieldName}
+          city={newCity}
+          date={newDate}
+          time={newTime}
+          players={newMaxPlayers}
+          pricePerPerson={newPricePerPerson}
+          latitude={newLatitude}
+          longitude={newLongitude}
+          onClose={() => setShowCreatePreview(false)}
+          onCreate={createMatch}
+        />
         <BottomNav
           active="create"
           onHome={goHome}
@@ -1316,155 +1572,384 @@ function AppContent() {
           {selectedMatch ? (
             <>
               <View style={styles.detailHeroCard}>
-                <View style={styles.cardTitleRow}>
-                  <Text style={styles.detailTitle}>{selectedMatch.title}</Text>
-                  <StatusBadge status={selectedMatch.status} />
-                </View>
-                <Text style={styles.detailMeta}>
-                  {formatDate(selectedMatch.startsAt)}
-                </Text>
-                <Text style={styles.detailMeta}>
-                  {selectedMatch.field?.name ?? "Campo por confirmar"} -{" "}
-                  {selectedMatch.field?.city ?? "Sin ciudad"}
-                </Text>
-                <Text style={styles.detailMeta}>
-                  Organiza {selectedMatch.createdBy.displayName} -{" "}
-                  {selectedMatch.maxPlayersPerTeam} por equipo
-                </Text>
-                <TeamOccupancy match={selectedMatch} />
-                <TeamRoster match={selectedMatch} />
-                {selectedMatch.status !== "OPEN" ? (
-                  <View style={styles.statusBanner}>
-                    <Text style={styles.statusBannerText}>
-                      Partido cancelado
+                <ImageBackground
+                  source={{ uri: getMatchCover(selectedMatch) }}
+                  style={styles.detailCover}
+                  imageStyle={styles.detailCoverImage}
+                >
+                  <View style={styles.detailCoverOverlay} />
+                  <View style={styles.detailCoverTop}>
+                    <StatusBadge status={selectedMatch.status} />
+                    <Text style={styles.detailCoverPill}>
+                      {formatPriceFromCents(selectedMatch.pricePerPersonCents)}
                     </Text>
                   </View>
-                ) : selectedIsParticipant ? (
-                  <Pressable
-                    style={styles.ghostDangerButton}
-                    onPress={() => leaveMatch(selectedMatch.id)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.ghostDangerText}>
-                      Salir del partido
+                  <View style={styles.detailCoverContent}>
+                    <Text style={styles.detailTitle} numberOfLines={2}>
+                      {selectedMatch.title}
                     </Text>
-                  </Pressable>
-                ) : (
-                  <View style={styles.cardActions}>
-                    <Pressable
-                      style={styles.darkJoinButton}
-                      onPress={() => joinMatch(selectedMatch.id, "A")}
-                      disabled={
-                        loading ||
-                        !selectedIsOpen ||
-                        isTeamFull(selectedMatch, "A")
-                      }
-                    >
-                      <Text style={styles.darkJoinText}>
-                        {isTeamFull(selectedMatch, "A")
-                          ? "Completo"
-                          : "Equipo A"}
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      style={styles.limeJoinButton}
-                      onPress={() => joinMatch(selectedMatch.id, "B")}
-                      disabled={
-                        loading ||
-                        !selectedIsOpen ||
-                        isTeamFull(selectedMatch, "B")
-                      }
-                    >
-                      <Text style={styles.limeJoinText}>
-                        {isTeamFull(selectedMatch, "B")
-                          ? "Completo"
-                          : "Equipo B"}
-                      </Text>
-                    </Pressable>
+                    <Text style={styles.detailSubtitle} numberOfLines={1}>
+                      {selectedMatch.field?.name ?? "Campo por confirmar"}
+                    </Text>
                   </View>
-                )}
-                {selectedIsOwner && selectedIsOpen ? (
-                  <Pressable
-                    style={styles.cancelMatchButton}
-                    onPress={() => cancelMatch(selectedMatch.id)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.cancelMatchText}>Cancelar partido</Text>
-                  </Pressable>
-                ) : null}
-              </View>
+                </ImageBackground>
 
-              <View style={styles.chatPanel}>
-                <View style={styles.chatHeader}>
-                  <Text style={styles.chatTitle}>Chat</Text>
-                  <Pressable
-                    onPress={() => loadMessages(selectedMatch.id)}
-                    disabled={loading}
-                  >
-                    <Text style={styles.refreshText}>Actualizar</Text>
-                  </Pressable>
-                </View>
-                {messages.length === 0 ? (
-                  <Text style={styles.profileEmpty}>
-                    {selectedIsParticipant
-                      ? "Todavia no hay mensajes."
-                      : "Unete al partido para escribir en el chat."}
-                  </Text>
-                ) : (
-                  messages.map((message) => (
-                    <View key={message.id} style={styles.messageBubble}>
-                      <Text style={styles.messageAuthor}>
-                        {message.author.displayName}
-                      </Text>
-                      <Text style={styles.messageContent}>
-                        {message.content}
-                      </Text>
-                      <Text style={styles.messageTime}>
-                        {formatTime(message.sentAt)}
+                <View style={styles.detailBody}>
+                  <View style={styles.detailInfoGrid}>
+                    <View style={styles.detailInfoCard}>
+                      <Text style={styles.detailInfoLabel}>Fecha</Text>
+                      <Text style={styles.detailInfoValue} numberOfLines={2}>
+                        {formatDate(selectedMatch.startsAt)}
                       </Text>
                     </View>
-                  ))
-                )}
-                {selectedIsParticipant ? (
-                  <View style={styles.quickMessageRow}>
-                    <QuickMessageButton
-                      label="Voy llegando"
-                      onPress={() => sendMatchMessage("Voy llegando")}
-                      disabled={loading}
-                    />
-                    <QuickMessageButton
-                      label="Confirmo"
-                      onPress={() => sendMatchMessage("Confirmo asistencia")}
-                      disabled={loading}
-                    />
-                    <QuickMessageButton
-                      label="Necesito peto"
-                      onPress={() => sendMatchMessage("Necesito peto")}
-                      disabled={loading}
+                    <View style={styles.detailInfoCard}>
+                      <Text style={styles.detailInfoLabel}>Formato</Text>
+                      <Text style={styles.detailInfoValue}>
+                        {selectedMatch.maxPlayersPerTeam} vs{" "}
+                        {selectedMatch.maxPlayersPerTeam}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailLocationCard}>
+                    <View style={styles.detailLocationIcon}>
+                      <View style={styles.detailLocationIconRing}>
+                        <View style={styles.detailLocationIconDot} />
+                      </View>
+                    </View>
+                    <View style={styles.detailLocationTextWrap}>
+                      <Text style={styles.detailLocationTitle} numberOfLines={1}>
+                        {selectedMatch.field?.name ?? "Campo por confirmar"}
+                      </Text>
+                      <Text style={styles.detailLocationMeta} numberOfLines={2}>
+                        {selectedMatch.field?.address ?? "Direccion pendiente"} -{" "}
+                        {selectedMatch.field?.city ?? "Sin ciudad"}
+                      </Text>
+                      <Pressable
+                        onPress={() => openPublicProfile(selectedMatch.createdBy.id)}
+                      >
+                        <Text style={styles.detailOrganizer} numberOfLines={1}>
+                          Organiza {publicHandle(selectedMatch.createdBy)}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <Pressable
+                    style={styles.directionsButton}
+                    onPress={() => openDirections(selectedMatch)}
+                  >
+                    <Text style={styles.directionsButtonText}>Como llegar</Text>
+                  </Pressable>
+
+                  <View style={styles.detailSection}>
+                    <View style={styles.detailSectionHeader}>
+                      <Text style={styles.detailSectionTitle}>Jugadores</Text>
+                      <Text style={styles.detailSectionMeta}>
+                        {(selectedMatch.occupancy?.totalPlayers ?? 0)}/
+                        {selectedMatch.occupancy?.totalCapacity ??
+                          selectedMatch.maxPlayersPerTeam * 2}
+                      </Text>
+                    </View>
+                    <TeamOccupancy match={selectedMatch} />
+                    <TeamRoster
+                      match={selectedMatch}
+                      onOpenProfile={openPublicProfile}
                     />
                   </View>
-                ) : null}
-                <View style={styles.messageComposer}>
-                  <TextInput
-                    value={messageText}
-                    onChangeText={setMessageText}
-                    placeholder="Escribe al equipo"
-                    placeholderTextColor="#8A8F8B"
-                    style={styles.messageInput}
-                    editable={selectedIsParticipant && !loading}
-                  />
+
+                  <View style={styles.detailActionPanel}>
+                    {selectedIsParticipant && selectedMatch.status !== "CANCELLED" ? (
+                      <Pressable
+                        style={styles.ghostDangerButton}
+                        onPress={() => leaveMatch(selectedMatch.id)}
+                        disabled={loading}
+                      >
+                        <Text style={styles.ghostDangerText}>
+                          Salir del partido
+                        </Text>
+                      </Pressable>
+                    ) : selectedMatch.status !== "OPEN" ? (
+                      <View style={styles.statusBanner}>
+                        <Text style={styles.statusBannerText}>
+                          {selectedMatch.status === "FULL"
+                            ? "Partido completo"
+                            : "Partido cancelado"}
+                        </Text>
+                      </View>
+                    ) : (
+                      <>
+                        <Text style={styles.detailActionTitle}>
+                          Elige equipo para apuntarte
+                        </Text>
+                        <View style={styles.cardActions}>
+                          <Pressable
+                            style={[
+                              styles.darkJoinButton,
+                              (loading ||
+                                !selectedIsOpen ||
+                                isTeamFull(selectedMatch, "A")) &&
+                                styles.actionButtonDisabled,
+                            ]}
+                            onPress={() => joinMatch(selectedMatch.id, "A")}
+                            disabled={
+                              loading ||
+                              !selectedIsOpen ||
+                              isTeamFull(selectedMatch, "A")
+                            }
+                          >
+                            <Text style={styles.darkJoinText}>
+                              {isTeamFull(selectedMatch, "A")
+                                ? "Completo"
+                                : "Equipo A"}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            style={[
+                              styles.limeJoinButton,
+                              (loading ||
+                                !selectedIsOpen ||
+                                isTeamFull(selectedMatch, "B")) &&
+                                styles.actionButtonDisabled,
+                            ]}
+                            onPress={() => joinMatch(selectedMatch.id, "B")}
+                            disabled={
+                              loading ||
+                              !selectedIsOpen ||
+                              isTeamFull(selectedMatch, "B")
+                            }
+                          >
+                            <Text style={styles.limeJoinText}>
+                              {isTeamFull(selectedMatch, "B")
+                                ? "Completo"
+                                : "Equipo B"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </>
+                    )}
+                    {selectedIsOwner && selectedMatch.status !== "CANCELLED" ? (
+                      <Pressable
+                        style={styles.cancelMatchButton}
+                        onPress={() => cancelMatch(selectedMatch.id)}
+                        disabled={loading}
+                      >
+                        <Text style={styles.cancelMatchText}>Cancelar partido</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+
                   <Pressable
-                    style={[
-                      styles.sendButton,
-                      !selectedIsParticipant && styles.sendButtonDisabled,
-                    ]}
-                    onPress={sendMessage}
-                    disabled={!selectedIsParticipant || loading}
+                    style={styles.detailChatLauncher}
+                    onPress={() => {
+                      setShowMatchChat(true);
+                      loadMessages(selectedMatch.id).catch(() => setMessages([]));
+                    }}
                   >
-                    <Text style={styles.sendButtonText}>Enviar</Text>
+                    <View style={styles.detailChatIcon}>
+                      <View style={styles.detailChatBubbleShape}>
+                        <View style={styles.detailChatDot} />
+                        <View style={styles.detailChatDot} />
+                      </View>
+                    </View>
+                    <View style={styles.detailChatTextWrap}>
+                      <Text style={styles.detailChatTitle}>Chat del partido</Text>
+                      <Text style={styles.detailChatMeta}>
+                        {selectedIsParticipant
+                          ? messages.length > 0
+                            ? `${messages.length} mensajes`
+                            : "Coordina con tu equipo"
+                          : "Unete al partido para escribir"}
+                      </Text>
+                    </View>
+                    <Text style={styles.detailChatOpenText}>Abrir</Text>
                   </Pressable>
                 </View>
               </View>
+
+              <Modal
+                visible={showMatchChat}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowMatchChat(false)}
+              >
+                <Pressable
+                  style={styles.chatModalBackdrop}
+                  onPress={() => setShowMatchChat(false)}
+                >
+                  <Pressable
+                    style={[
+                      styles.chatSheet,
+                      { paddingBottom: safeInsets.bottom + 14 },
+                    ]}
+                    onPress={(event) => event.stopPropagation()}
+                  >
+                    <View style={styles.chatHandle} />
+                    <View style={styles.chatHeader}>
+                      <View>
+                        <Text style={styles.chatEyebrow}>Partido</Text>
+                        <Text style={styles.chatTitle}>Chat</Text>
+                      </View>
+                      <View style={styles.chatHeaderActions}>
+                        <Pressable
+                          style={styles.chatIconButton}
+                          onPress={() => loadMessages(selectedMatch.id)}
+                          disabled={loading}
+                        >
+                          <Text style={styles.chatIconButtonText}>Actualizar</Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.chatCloseButton}
+                          onPress={() => setShowMatchChat(false)}
+                        >
+                          <Text style={styles.chatCloseText}>Cerrar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                    <ScrollView
+                      style={styles.chatMessages}
+                      contentContainerStyle={styles.chatMessagesContent}
+                      keyboardShouldPersistTaps="handled"
+                    >
+                      {messages.length === 0 ? (
+                        <View style={styles.chatEmptyCard}>
+                          <Text style={styles.chatEmptyTitle}>
+                            {selectedIsParticipant
+                              ? "Todavia no hay mensajes"
+                              : "Chat solo para jugadores"}
+                          </Text>
+                          <Text style={styles.chatEmptyText}>
+                            {selectedIsParticipant
+                              ? "Escribe el primero y coordina la llegada."
+                              : "Unete a un equipo para poder escribir aqui."}
+                          </Text>
+                        </View>
+                      ) : (
+                        messages.map((message) => (
+                          <View key={message.id} style={styles.messageBubble}>
+                            <Pressable
+                              onPress={() => openPublicProfile(message.author.id)}
+                            >
+                              <Text style={styles.messageAuthor}>
+                                {publicHandle(message.author)}
+                              </Text>
+                            </Pressable>
+                            <Text style={styles.messageContent}>
+                              {message.content}
+                            </Text>
+                            <Text style={styles.messageTime}>
+                              {formatTime(message.sentAt)}
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </ScrollView>
+                    {selectedIsParticipant ? (
+                      <View style={styles.quickMessageRow}>
+                        <QuickMessageButton
+                          label="Voy llegando"
+                          onPress={() => sendMatchMessage("Voy llegando")}
+                          disabled={loading}
+                        />
+                        <QuickMessageButton
+                          label="Confirmo"
+                          onPress={() => sendMatchMessage("Confirmo asistencia")}
+                          disabled={loading}
+                        />
+                        <QuickMessageButton
+                          label="Necesito peto"
+                          onPress={() => sendMatchMessage("Necesito peto")}
+                          disabled={loading}
+                        />
+                      </View>
+                    ) : null}
+                    <View style={styles.messageComposer}>
+                      <TextInput
+                        value={messageText}
+                        onChangeText={setMessageText}
+                        placeholder="Escribe al equipo"
+                        placeholderTextColor="#8A8F8B"
+                        style={styles.messageInput}
+                        editable={selectedIsParticipant && !loading}
+                      />
+                      <Pressable
+                        style={[
+                          styles.sendButton,
+                          !selectedIsParticipant && styles.sendButtonDisabled,
+                        ]}
+                        onPress={sendMessage}
+                        disabled={!selectedIsParticipant || loading}
+                      >
+                        <Text style={styles.sendButtonText}>Enviar</Text>
+                      </Pressable>
+                    </View>
+                  </Pressable>
+                </Pressable>
+              </Modal>
+              <Modal
+                visible={showPublicProfile}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowPublicProfile(false)}
+              >
+                <Pressable
+                  style={styles.publicProfileBackdrop}
+                  onPress={() => setShowPublicProfile(false)}
+                >
+                  <Pressable
+                    style={styles.publicProfileCard}
+                    onPress={(event) => event.stopPropagation()}
+                  >
+                    <View style={styles.publicProfileTop}>
+                      <View style={styles.publicProfileAvatar}>
+                        <Text style={styles.publicProfileAvatarText}>
+                          {(publicProfile?.username ||
+                            publicProfile?.fullName ||
+                            publicProfile?.displayName ||
+                            "J")
+                            .charAt(0)
+                            .toUpperCase()}
+                        </Text>
+                      </View>
+                      <Pressable
+                        style={styles.publicProfileClose}
+                        onPress={() => setShowPublicProfile(false)}
+                      >
+                        <Text style={styles.publicProfileCloseText}>Cerrar</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={styles.publicProfileName}>
+                      {publicProfile?.fullName ||
+                        publicProfile?.displayName ||
+                        "Jugador Footy"}
+                    </Text>
+                    <Text style={styles.publicProfileHandle}>
+                      {publicHandle(publicProfile ?? undefined)}
+                    </Text>
+                    <View style={styles.publicProfileInfoGrid}>
+                      <View style={styles.publicProfileInfoCard}>
+                        <Text style={styles.publicProfileInfoLabel}>Posicion</Text>
+                        <Text style={styles.publicProfileInfoValue}>
+                          {positionLabel(publicProfile?.preferredPosition ?? null)}
+                        </Text>
+                      </View>
+                      <View style={styles.publicProfileInfoCard}>
+                        <Text style={styles.publicProfileInfoLabel}>Ciudad</Text>
+                        <Text style={styles.publicProfileInfoValue}>
+                          {publicProfile?.city || "Sin ciudad"}
+                        </Text>
+                      </View>
+                    </View>
+                    {publicProfile?.bio ? (
+                      <Text style={styles.publicProfileBio}>{publicProfile.bio}</Text>
+                    ) : (
+                      <Text style={styles.publicProfileBioMuted}>
+                        Este jugador todavia no ha escrito una bio.
+                      </Text>
+                    )}
+                  </Pressable>
+                </Pressable>
+              </Modal>
             </>
           ) : (
             <View style={styles.emptyPanel}>
@@ -1566,6 +2051,7 @@ function AppContent() {
                 onSelect={setSelectedMatchId}
                 onClearSelection={() => setSelectedMatchId(null)}
                 onOpenDetail={openDetail}
+                onDirections={openDirections}
                 onJoin={joinMatch}
                 loading={loading}
               />
@@ -1743,11 +2229,31 @@ function LogoMark({ size = 42 }: { size?: number }) {
 function LocationTargetIcon() {
   return (
     <View style={styles.locationIcon}>
-      <View style={styles.locationIconNeedle} />
-      <View style={styles.locationIconCore} />
+      <View style={styles.locationIconPin} />
+      <View style={styles.locationIconInner} />
+      <View style={styles.locationIconStem} />
     </View>
   );
 }
+
+function EditProfileIcon({ active }: { active: boolean }) {
+  if (active) {
+    return (
+      <View style={styles.closeEditIcon}>
+        <View style={[styles.closeEditLine, styles.closeEditLineOne]} />
+        <View style={[styles.closeEditLine, styles.closeEditLineTwo]} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.editIcon}>
+      <View style={styles.editIconBody} />
+      <View style={styles.editIconTip} />
+    </View>
+  );
+}
+
 function TopStatus() {
   return <View style={styles.statusBarMock}></View>;
 }
@@ -1927,6 +2433,7 @@ function MapHome({
   onSelect,
   onClearSelection,
   onOpenDetail,
+  onDirections,
   onJoin,
   loading,
 }: {
@@ -1938,6 +2445,7 @@ function MapHome({
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onOpenDetail: (id: string) => void;
+  onDirections: (match: MatchResponse) => void;
   onJoin: (id: string, team: TeamSide) => void;
   loading: boolean;
 }) {
@@ -2312,6 +2820,7 @@ function MapHome({
         <SelectedPopup
           match={selectedMatch}
           onOpenDetail={onOpenDetail}
+          onDirections={onDirections}
           onJoin={onJoin}
           onClose={onClearSelection}
           loading={loading}
@@ -2340,6 +2849,10 @@ function LocationPickerMap({
   const panStart = useRef(dragOffset);
   const movedDuringGesture = useRef(false);
   const latestDragOffset = useRef(dragOffset);
+  const pinchStartDistance = useRef(0);
+  const pinchStartZoom = useRef(15);
+  const pinchActive = useRef(false);
+  const lastWheelZoomAt = useRef(0);
 
   useEffect(() => {
     latestDragOffset.current = dragOffset;
@@ -2388,6 +2901,11 @@ function LocationPickerMap({
     setDragOffset({ x: 0, y: 0 });
   }
 
+  function applyZoomDelta(delta: number) {
+    setZoom((current) => clampMapZoom(current + delta));
+    setDragOffset({ x: 0, y: 0 });
+  }
+
   async function searchLocation() {
     const query = locationSearch.trim();
     if (!query) {
@@ -2421,15 +2939,40 @@ function LocationPickerMap({
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_event, gesture) =>
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: (event, gesture) =>
+          event.nativeEvent.touches.length >= 2 ||
           Math.abs(gesture.dx) > 5 || Math.abs(gesture.dy) > 5,
         onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: () => {
+        onPanResponderGrant: (event) => {
           movedDuringGesture.current = false;
           panStart.current = latestDragOffset.current;
+          const touches = event.nativeEvent.touches;
+          pinchActive.current = touches.length >= 2;
+          pinchStartDistance.current = getTouchDistance(touches);
+          pinchStartZoom.current = zoom;
         },
         onPanResponderMove: (_event, gesture) => {
+          const touches = _event.nativeEvent.touches;
+          if (touches.length >= 2) {
+            const distance = getTouchDistance(touches);
+            if (pinchStartDistance.current === 0) {
+              pinchStartDistance.current = distance;
+              pinchStartZoom.current = zoom;
+            }
+            if (distance > 0 && pinchStartDistance.current > 0) {
+              movedDuringGesture.current = true;
+              pinchActive.current = true;
+              const zoomDelta = Math.round(
+                Math.log2(distance / pinchStartDistance.current) * 2,
+              );
+              setZoom(clampMapZoom(pinchStartZoom.current + zoomDelta));
+              setDragOffset({ x: 0, y: 0 });
+            }
+            return;
+          }
+
+          pinchActive.current = false;
           if (Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2) {
             movedDuringGesture.current = true;
           }
@@ -2439,6 +2982,12 @@ function LocationPickerMap({
           });
         },
         onPanResponderRelease: (event) => {
+          if (pinchActive.current) {
+            pinchActive.current = false;
+            pinchStartDistance.current = 0;
+            return;
+          }
+          pinchStartDistance.current = 0;
           if (movedDuringGesture.current) {
             commitDrag(latestDragOffset.current);
             return;
@@ -2449,10 +2998,34 @@ function LocationPickerMap({
     [canvasLeft, canvasTop, center, mapData.topLeft, onChange, zoom],
   );
 
+  const mapWheelProps =
+    Platform.OS === "web"
+      ? ({
+          onWheel: (event: {
+            deltaY?: number;
+            nativeEvent?: { deltaY?: number };
+            preventDefault?: () => void;
+          }) => {
+            event.preventDefault?.();
+            const deltaY = event.deltaY ?? event.nativeEvent?.deltaY ?? 0;
+            if (Math.abs(deltaY) < 4) {
+              return;
+            }
+            const now = Date.now();
+            if (now - lastWheelZoomAt.current < 110) {
+              return;
+            }
+            lastWheelZoomAt.current = now;
+            applyZoomDelta(deltaY > 0 ? -1 : 1);
+          },
+        } as object)
+      : {};
+
   return (
     <View
       style={styles.locationPickerMap}
       onLayout={(event) => setViewport(event.nativeEvent.layout)}
+      {...mapWheelProps}
     >
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
         <View
@@ -2491,8 +3064,8 @@ function LocationPickerMap({
             style={[
               styles.locationPickedMarker,
               {
-                left: selectedPoint.left - 18,
-                top: selectedPoint.top - 36,
+                left: selectedPoint.left - 17,
+                top: selectedPoint.top - 17,
               },
             ]}
           >
@@ -2527,24 +3100,6 @@ function LocationPickerMap({
           Toca el mapa para fijar la pista
         </Text>
       </View>
-      <View style={styles.locationPickerZoom}>
-        <Pressable
-          style={styles.mapZoomButton}
-          onPress={() =>
-            setZoom((current) => Math.min(MAP_MAX_ZOOM, current + 1))
-          }
-        >
-          <Text style={styles.mapZoomText}>+</Text>
-        </Pressable>
-        <Pressable
-          style={styles.mapZoomButton}
-          onPress={() =>
-            setZoom((current) => Math.max(MAP_MIN_ZOOM, current - 1))
-          }
-        >
-          <Text style={styles.mapZoomText}>-</Text>
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -2578,7 +3133,7 @@ function ListHome({
     >
       {loading ? (
         <View style={styles.listLoadingRow}>
-          <ActivityIndicator color="#B3F351" />
+          <ActivityIndicator color="#8FEA6A" />
           <Text style={styles.listLoadingText}>Actualizando partidos</Text>
         </View>
       ) : null}
@@ -2607,7 +3162,7 @@ function ListHome({
             >
               <ImageBackground
                 source={{
-                  uri: "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=900&q=70",
+                  uri: getMatchCover(match),
                 }}
                 imageStyle={styles.listCardImage}
                 style={styles.listCardImageWrap}
@@ -2650,12 +3205,14 @@ function ListHome({
 function SelectedPopup({
   match,
   onOpenDetail,
+  onDirections,
   onJoin,
   onClose,
   loading,
 }: {
   match: MatchResponse;
   onOpenDetail: (id: string) => void;
+  onDirections: (match: MatchResponse) => void;
   onJoin: (id: string, team: TeamSide) => void;
   onClose: () => void;
   loading: boolean;
@@ -2664,7 +3221,7 @@ function SelectedPopup({
     <View style={styles.popupCard}>
       <ImageBackground
         source={{
-          uri: "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=900&q=70",
+          uri: getMatchCover(match),
         }}
         style={styles.popupImageWrap}
         imageStyle={styles.popupImage}
@@ -2688,6 +3245,9 @@ function SelectedPopup({
             {match.field?.name ?? "Campo por confirmar"} -{" "}
             {match.field?.city ?? "Sin ciudad"}
           </Text>
+          <Text style={styles.popupPrice}>
+            {formatPriceFromCents(match.pricePerPersonCents)} por persona
+          </Text>
           <OccupancyBar match={match} />
           <View style={styles.popupActions}>
             <Pressable
@@ -2698,12 +3258,23 @@ function SelectedPopup({
               <Text style={styles.popupDarkText}>Ver detalle</Text>
             </Pressable>
             <Pressable
+              style={styles.popupDarkButton}
+              onPress={() => onDirections(match)}
+              disabled={loading}
+            >
+              <Text style={styles.popupDarkText}>Como llegar</Text>
+            </Pressable>
+            <Pressable
               style={styles.popupLimeButton}
               onPress={() => onJoin(match.id, "A")}
               disabled={loading || !isMatchOpen(match) || isTeamFull(match, "A")}
             >
               <Text style={styles.popupLimeText}>
-                {isMatchOpen(match) ? "Unirme" : "Cerrado"}
+                {match.status === "FULL"
+                  ? "Completo"
+                  : isMatchOpen(match)
+                    ? "Unirme"
+                    : "Cerrado"}
               </Text>
             </Pressable>
           </View>
@@ -2840,14 +3411,20 @@ function OccupancyBar({ match }: { match: MatchResponse }) {
   );
 }
 
-function TeamRoster({ match }: { match: MatchResponse }) {
+function TeamRoster({
+  match,
+  onOpenProfile,
+}: {
+  match: MatchResponse;
+  onOpenProfile?: (userId: string) => void;
+}) {
   const teamA = match.teams?.teamA ?? [];
   const teamB = match.teams?.teamB ?? [];
 
   return (
     <View style={styles.rosterGrid}>
-      <RosterColumn title="Equipo A" players={teamA} />
-      <RosterColumn title="Equipo B" players={teamB} />
+      <RosterColumn title="Equipo A" players={teamA} onOpenProfile={onOpenProfile} />
+      <RosterColumn title="Equipo B" players={teamB} onOpenProfile={onOpenProfile} />
     </View>
   );
 }
@@ -2855,9 +3432,11 @@ function TeamRoster({ match }: { match: MatchResponse }) {
 function RosterColumn({
   title,
   players,
+  onOpenProfile,
 }: {
   title: string;
   players: MatchPlayerResponse[];
+  onOpenProfile?: (userId: string) => void;
 }) {
   return (
     <View style={styles.rosterColumn}>
@@ -2866,16 +3445,20 @@ function RosterColumn({
         <Text style={styles.rosterEmpty}>Sin jugadores</Text>
       ) : (
         players.map((player) => (
-          <View key={player.participationId} style={styles.rosterPlayer}>
+          <Pressable
+            key={player.participationId}
+            style={styles.rosterPlayer}
+            onPress={() => onOpenProfile?.(player.userId)}
+          >
             <View style={styles.rosterAvatar}>
               <Text style={styles.rosterAvatarText}>
-                {player.displayName.charAt(0).toUpperCase()}
+                {(player.username || player.displayName).charAt(0).toUpperCase()}
               </Text>
             </View>
             <Text style={styles.rosterName} numberOfLines={1}>
-              {player.displayName}
+              {publicHandle(player)}
             </Text>
-          </View>
+          </Pressable>
         ))
       )}
     </View>
@@ -3013,6 +3596,308 @@ function Field({
   );
 }
 
+function CalendarPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [monthOffset, setMonthOffset] = useState(0);
+  const { year, month } = getCalendarMonth(monthOffset);
+  const firstDay = new Date(year, month, 1).getDay();
+  const firstDayMondayBased = (firstDay + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const blanks = Array.from({ length: firstDayMondayBased });
+  const days = Array.from({ length: daysInMonth }, (_, index) => index + 1);
+  const today = datePartsFromOffset(0);
+  const monthName = new Date(year, month, 1).toLocaleDateString("es-ES", {
+    month: "long",
+    year: "numeric",
+  });
+
+  return (
+    <View style={styles.calendarCard}>
+      <View style={styles.calendarHeader}>
+        <Pressable
+          style={styles.calendarNavButton}
+          onPress={() => setMonthOffset((current) => Math.max(0, current - 1))}
+        >
+          <Text style={styles.calendarNavText}>{"<"}</Text>
+        </Pressable>
+        <Text style={styles.calendarTitle}>{monthName}</Text>
+        <Pressable
+          style={styles.calendarNavButton}
+          onPress={() => setMonthOffset((current) => Math.min(2, current + 1))}
+        >
+          <Text style={styles.calendarNavText}>{">"}</Text>
+        </Pressable>
+      </View>
+      <View style={styles.calendarWeekRow}>
+        {["L", "M", "X", "J", "V", "S", "D"].map((day) => (
+          <Text key={day} style={styles.calendarWeekText}>
+            {day}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.calendarGrid}>
+        {blanks.map((_, index) => (
+          <View key={`blank-${index}`} style={styles.calendarDayBlank} />
+        ))}
+        {days.map((day) => {
+          const dateValue = monthDateParts(year, month, day);
+          const selected = value === dateValue;
+          const past = dateValue < today;
+          return (
+            <Pressable
+              key={dateValue}
+              style={[
+                styles.calendarDay,
+                selected && styles.calendarDaySelected,
+                past && styles.calendarDayDisabled,
+              ]}
+              onPress={() => !past && onChange(dateValue)}
+              disabled={past}
+            >
+              <Text
+                style={[
+                  styles.calendarDayText,
+                  selected && styles.calendarDayTextSelected,
+                  past && styles.calendarDayTextDisabled,
+                ]}
+              >
+                {day}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function TimeWheel({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [currentHour = "19", currentMinute = "00"] = value.split(":");
+  const hourScrollRef = useRef<ScrollView | null>(null);
+  const minuteScrollRef = useRef<ScrollView | null>(null);
+  const hours = Array.from({ length: 24 }, (_, index) =>
+    String(index).padStart(2, "0"),
+  );
+  const minutes = ["00", "15", "30", "45"];
+  const wheelItemHeight = 40;
+
+  function updateTime(nextHour: string, nextMinute: string) {
+    onChange(`${nextHour}:${nextMinute}`);
+  }
+
+  function selectFromScroll(
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+    values: string[],
+    currentOtherValue: string,
+    type: "hour" | "minute",
+  ) {
+    const rawIndex = Math.round(event.nativeEvent.contentOffset.y / wheelItemHeight);
+    const index = Math.max(0, Math.min(values.length - 1, rawIndex));
+    const selected = values[index];
+    if (type === "hour") {
+      updateTime(selected, currentOtherValue);
+      return;
+    }
+    updateTime(currentOtherValue, selected);
+  }
+
+  useEffect(() => {
+    const hourIndex = Math.max(0, hours.indexOf(currentHour));
+    const minuteIndex = Math.max(0, minutes.indexOf(currentMinute));
+    hourScrollRef.current?.scrollTo({
+      y: hourIndex * wheelItemHeight,
+      animated: false,
+    });
+    minuteScrollRef.current?.scrollTo({
+      y: minuteIndex * wheelItemHeight,
+      animated: false,
+    });
+  }, [currentHour, currentMinute]);
+
+  return (
+    <View style={styles.timeWheelBlock}>
+      <Text style={styles.fieldLabel}>Hora</Text>
+      <View style={styles.timeWheelCard}>
+        <View style={styles.timeWheelColumn}>
+          <Text style={styles.timeWheelLabel}>Hora</Text>
+          <ScrollView
+            ref={hourScrollRef}
+            style={styles.timeWheelScroll}
+            contentContainerStyle={styles.timeWheelContent}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            snapToInterval={wheelItemHeight}
+            decelerationRate="fast"
+            onMomentumScrollEnd={(event) =>
+              selectFromScroll(event, hours, currentMinute, "hour")
+            }
+            onScrollEndDrag={(event) =>
+              selectFromScroll(event, hours, currentMinute, "hour")
+            }
+          >
+            {hours.map((hour) => {
+              const active = hour === currentHour;
+              return (
+                <Pressable
+                  key={hour}
+                  style={[styles.timeWheelItem, active && styles.timeWheelItemActive]}
+                  onPress={() => updateTime(hour, currentMinute)}
+                >
+                  <Text
+                    style={[
+                      styles.timeWheelText,
+                      active && styles.timeWheelTextActive,
+                    ]}
+                  >
+                    {hour}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+        <Text style={styles.timeWheelSeparator}>:</Text>
+        <View style={styles.timeWheelColumn}>
+          <Text style={styles.timeWheelLabel}>Min</Text>
+          <ScrollView
+            ref={minuteScrollRef}
+            style={styles.timeWheelScroll}
+            contentContainerStyle={styles.timeWheelContent}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            snapToInterval={wheelItemHeight}
+            decelerationRate="fast"
+            onMomentumScrollEnd={(event) =>
+              selectFromScroll(event, minutes, currentHour, "minute")
+            }
+            onScrollEndDrag={(event) =>
+              selectFromScroll(event, minutes, currentHour, "minute")
+            }
+          >
+            {minutes.map((minute) => {
+              const active = minute === currentMinute;
+              return (
+                <Pressable
+                  key={minute}
+                  style={[styles.timeWheelItem, active && styles.timeWheelItemActive]}
+                  onPress={() => updateTime(currentHour, minute)}
+                >
+                  <Text
+                    style={[
+                      styles.timeWheelText,
+                      active && styles.timeWheelTextActive,
+                    ]}
+                  >
+                    {minute}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function CreatePreviewModal({
+  visible,
+  loading,
+  title,
+  fieldName,
+  city,
+  date,
+  time,
+  players,
+  pricePerPerson,
+  latitude,
+  longitude,
+  onClose,
+  onCreate,
+}: {
+  visible: boolean;
+  loading: boolean;
+  title: string;
+  fieldName: string;
+  city: string;
+  date: string;
+  time: string;
+  players: string;
+  pricePerPerson: string;
+  latitude: number;
+  longitude: number;
+  onClose: () => void;
+  onCreate: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.previewOverlay}>
+        <View style={styles.previewSheet}>
+          <View style={styles.previewBubbleOne} />
+          <View style={styles.previewBubbleTwo} />
+          <View style={styles.previewHandle} />
+          <Text style={styles.previewEyebrow}>Vista previa</Text>
+          <Text style={styles.previewTitle}>{title.trim() || "Partido Footy"}</Text>
+          <Text style={styles.previewMeta}>
+            {fieldName.trim() || "Campo por confirmar"} -{" "}
+            {city.trim() || "Ciudad pendiente"}
+          </Text>
+          <View style={styles.previewInfoGrid}>
+            <PreviewInfo label="Fecha" value={`${date} - ${time}`} />
+            <PreviewInfo label="Formato" value={`${players} vs ${players}`} />
+            <PreviewInfo
+              label="Precio"
+              value={`${formatDraftPrice(pricePerPerson)} por persona`}
+            />
+            <PreviewInfo
+              label="Ubicacion"
+              value={`${latitude.toFixed(5)}, ${longitude.toFixed(5)}`}
+            />
+          </View>
+          <View style={styles.previewActions}>
+            <Pressable style={styles.previewSecondaryButton} onPress={onClose}>
+              <Text style={styles.previewSecondaryText}>Editar</Text>
+            </Pressable>
+            <Pressable
+              style={styles.previewPrimaryButton}
+              onPress={onCreate}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#0A110E" />
+              ) : (
+                <Text style={styles.previewPrimaryText}>Crear partido</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function PreviewInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.previewInfoCard}>
+      <Text style={styles.previewInfoLabel}>{label}</Text>
+      <Text style={styles.previewInfoValue}>{value}</Text>
+    </View>
+  );
+}
+
 function FilterButton({
   label,
   active,
@@ -3061,6 +3946,27 @@ function PositionButton({
           active && styles.positionButtonTextActive,
         ]}
       >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function QuickChip({
+  label,
+  active,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[styles.quickChip, active && styles.quickChipActive]}
+      onPress={onPress}
+    >
+      <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
         {label}
       </Text>
     </Pressable>
@@ -3165,7 +4071,7 @@ function CompactMatch({
     <Pressable style={styles.compactMatch} onPress={onPress}>
       <ImageBackground
         source={{
-          uri: "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=900&q=70",
+          uri: getMatchCover(match),
         }}
         imageStyle={styles.compactMatchImage}
         style={styles.compactMatchImageWrap}
@@ -3187,10 +4093,21 @@ function CompactMatch({
 }
 function StatusBadge({ status }: { status: string }) {
   const open = status === "OPEN";
+  const full = status === "FULL";
   return (
-    <View style={[styles.statusPill, !open && styles.statusPillClosed]}>
+    <View
+      style={[
+        styles.statusPill,
+        full && styles.statusPillFull,
+        !open && !full && styles.statusPillClosed,
+      ]}
+    >
       <Text
-        style={[styles.statusPillText, !open && styles.statusPillTextClosed]}
+        style={[
+          styles.statusPillText,
+          full && styles.statusPillTextFull,
+          !open && !full && styles.statusPillTextClosed,
+        ]}
       >
         {matchStatusLabel(status)}
       </Text>
@@ -3294,7 +4211,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   logoMark: {
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     overflow: "hidden",
     position: "relative",
   },
@@ -3400,7 +4317,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 14,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3413,7 +4330,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   authKicker: {
-    color: "#B3F351",
+    color: "#8FEA6A",
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0,
@@ -3484,7 +4401,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 7,
   },
-  modeButtonActive: { backgroundColor: "#B3F351" },
+  modeButtonActive: { backgroundColor: "#8FEA6A" },
   modeIconBox: {
     width: 18,
     height: 18,
@@ -3503,7 +4420,7 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
   },
   modeListLine: {
     width: 16,
@@ -3531,20 +4448,22 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   modeTextActive: { color: "#0A110E" },
-  fieldBlock: { gap: 7 },
-  fieldLabel: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  fieldBlock: { gap: 5 },
+  fieldLabel: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
   input: {
-    minHeight: 50,
+    minHeight: 46,
     borderRadius: 14,
     paddingHorizontal: 14,
-    backgroundColor: "#F6F1EA",
-    color: "#0A110E",
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    color: "#F7F1E8",
     fontSize: 14,
   },
   authButton: {
     minHeight: 54,
     borderRadius: 27,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3683,7 +4602,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3695,7 +4614,7 @@ const styles = StyleSheet.create({
     marginTop: -3,
   },
   smallLabel: {
-    color: "#B3F351",
+    color: "#8FEA6A",
     fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
@@ -3724,7 +4643,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     justifyContent: "center",
   },
-  homeMetricValue: { color: "#B3F351", fontSize: 22, fontWeight: "900" },
+  homeMetricValue: { color: "#8FEA6A", fontSize: 22, fontWeight: "900" },
   homeMetricLabel: {
     color: "rgba(227,219,208,0.72)",
     fontSize: 9,
@@ -3765,7 +4684,7 @@ const styles = StyleSheet.create({
     height: 15,
     borderRadius: 8,
     borderWidth: 3,
-    borderColor: "#B3F351",
+    borderColor: "#8FEA6A",
   },
   homeSearchHandle: {
     position: "absolute",
@@ -3774,7 +4693,7 @@ const styles = StyleSheet.create({
     width: 10,
     height: 3,
     borderRadius: 2,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     transform: [{ rotate: "45deg" }],
   },
   homeSearchInput: {
@@ -3806,7 +4725,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 17,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3871,7 +4790,7 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     right: -80,
     bottom: -140,
-    backgroundColor: "rgba(179,243,81,0.10)",
+    backgroundColor: "rgba(143,234,106,0.10)",
   },
   mapBottomCircleTwo: {
     position: "absolute",
@@ -3906,26 +4825,30 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  locationIconNeedle: {
+  locationIconPin: {
     position: "absolute",
-    width: 0,
-    height: 0,
-    borderLeftWidth: 8,
-    borderRightWidth: 8,
-    borderBottomWidth: 24,
-    borderLeftColor: "transparent",
-    borderRightColor: "transparent",
-    borderBottomColor: "#0A110E",
-    transform: [{ rotate: "42deg" }],
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#0A110E",
+    top: 1,
   },
-  locationIconCore: {
+  locationIconInner: {
     position: "absolute",
-    width: 7,
-    height: 7,
+    width: 8,
+    height: 8,
     borderRadius: 4,
-    backgroundColor: "#B3F351",
-    top: 8,
-    left: 9,
+    backgroundColor: "#F7F1E8",
+    top: 7,
+  },
+  locationIconStem: {
+    position: "absolute",
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    backgroundColor: "#0A110E",
+    bottom: 2,
+    transform: [{ rotate: "45deg" }],
   },
   mapZoomControls: {
     position: "absolute",
@@ -3970,7 +4893,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     minHeight: 42,
     borderRadius: 21,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     paddingHorizontal: 14,
     flexDirection: "row",
     alignItems: "center",
@@ -3988,41 +4911,38 @@ const styles = StyleSheet.create({
   },
   mapMarkerHalo: {
     position: "absolute",
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "rgba(179,243,81,0.18)",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(143,234,106,0.18)",
     borderWidth: 1,
-    borderColor: "rgba(179,243,81,0.25)",
+    borderColor: "rgba(143,234,106,0.28)",
   },
   mapMarkerHaloActive: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(179,243,81,0.24)",
-    borderColor: "rgba(247,241,232,0.42)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(143,234,106,0.24)",
+    borderColor: "#8FEA6A",
   },
   mapMarkerPin: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: "#B3F351",
-    borderWidth: 3,
-    borderColor: "rgba(0,0,0,0.78)",
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#8FEA6A",
+    borderWidth: 0,
     alignItems: "center",
     justifyContent: "center",
   },
   mapMarkerPinActive: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderColor: "#F7F1E8",
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#8FEA6A",
   },
   mapMarkerDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#0A110E",
+    width: 0,
+    height: 0,
   },
   popupCard: {
     position: "absolute",
@@ -4070,13 +4990,24 @@ const styles = StyleSheet.create({
   },
   popupCloseText: { color: "#F7F1E8", fontSize: 16, fontWeight: "900" },
   popupLabel: {
-    color: "#B3F351",
+    color: "#8FEA6A",
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   popupTitle: { color: "#F7F1E8", fontSize: 25, fontWeight: "900" },
   popupMeta: { color: "rgba(247,241,232,0.84)", fontSize: 13, lineHeight: 19 },
+  popupPrice: {
+    alignSelf: "flex-start",
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "rgba(143,234,106,0.16)",
+    color: "#E4FFD8",
+    fontSize: 11,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
   popupMetaLight: {
     color: "rgba(247,241,232,0.72)",
     fontSize: 12,
@@ -4099,7 +5030,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 50,
     borderRadius: 20,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4156,7 +5087,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  filterButtonActive: { backgroundColor: "#B3F351" },
+  filterButtonActive: { backgroundColor: "#8FEA6A" },
   filterButtonText: { color: "#E3DBD0", fontSize: 13, fontWeight: "900" },
   filterButtonTextActive: { color: "#0A110E" },
   listStatsRow: { flexDirection: "row", gap: 12 },
@@ -4168,7 +5099,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.08)",
   },
-  listStatValue: { color: "#B3F351", fontSize: 28, fontWeight: "900" },
+  listStatValue: { color: "#8FEA6A", fontSize: 28, fontWeight: "900" },
   listStatLabel: {
     color: "#E3DBD0",
     fontSize: 10,
@@ -4197,19 +5128,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(10,17,14,0.56)",
   },
   listCardPressArea: { gap: 6 },
-  listCardSelected: { borderWidth: 2, borderColor: "#B3F351" },
+  listCardSelected: { borderWidth: 2, borderColor: "#8FEA6A" },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 17, fontWeight: "900" },
   statusPill: {
     paddingHorizontal: 10,
     minHeight: 26,
     borderRadius: 13,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
+  statusPillFull: { backgroundColor: "#8FEA6A" },
   statusPillClosed: { backgroundColor: "rgba(217,88,88,0.18)" },
   statusPillText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
+  statusPillTextFull: { color: "#051116" },
   statusPillTextClosed: { color: "#8F2727" },
   listCardMeta: {
     color: "rgba(227,219,208,0.86)",
@@ -4235,7 +5168,7 @@ const styles = StyleSheet.create({
   matchCityPill: {
     overflow: "hidden",
     borderRadius: 15,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     color: "#0A110E",
     fontSize: 9,
     fontWeight: "900",
@@ -4269,7 +5202,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(227,219,208,0.24)",
     overflow: "hidden",
   },
-  occupancyFill: { height: 8, borderRadius: 8, backgroundColor: "#B3F351" },
+  occupancyFill: { height: 8, borderRadius: 8, backgroundColor: "#8FEA6A" },
   occupancyText: {
     color: "rgba(227,219,208,0.90)",
     fontSize: 9,
@@ -4291,7 +5224,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     borderRadius: 18,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -4357,7 +5290,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 2,
   },
-  navItemActive: { backgroundColor: "#B3F351" },
+  navItemActive: { backgroundColor: "#8FEA6A" },
   navCreateItem: {},
   navCreateIcon: {
     color: "rgba(227,219,208,0.78)",
@@ -4405,13 +5338,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 44,
     borderRadius: 19,
-    backgroundColor: "#B3F351",
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
-  logoutText: { color: "#0A110E", fontWeight: "900" },
+  logoutText: { color: "#F7F1E8", fontWeight: "900" },
   profileHeroCard: {
-    minHeight: 230,
+    minHeight: 238,
     borderRadius: 26,
     backgroundColor: "rgba(7,12,9,0.92)",
     borderWidth: 1,
@@ -4427,7 +5362,7 @@ const styles = StyleSheet.create({
     borderRadius: 90,
     right: -58,
     top: -58,
-    backgroundColor: "rgba(179,243,81,0.16)",
+    backgroundColor: "rgba(143,234,106,0.14)",
   },
   profileHeroTopline: {
     flexDirection: "row",
@@ -4436,24 +5371,67 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   profileEyebrow: {
-    color: "#B3F351",
+    color: "#8FEA6A",
     fontSize: 9,
     fontWeight: "900",
     textTransform: "uppercase",
   },
   editProfileButton: {
-    minHeight: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(227,219,208,0.12)",
-    paddingHorizontal: 13,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.16)",
     alignItems: "center",
     justifyContent: "center",
   },
   editProfileText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
+  editIcon: {
+    width: 22,
+    height: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    transform: [{ rotate: "-38deg" }],
+  },
+  editIconBody: {
+    width: 15,
+    height: 5,
+    borderRadius: 4,
+    backgroundColor: "#F7F1E8",
+  },
+  editIconTip: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 6,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    borderLeftColor: "#8FEA6A",
+    marginLeft: -1,
+  },
+  closeEditIcon: {
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  closeEditLine: {
+    position: "absolute",
+    width: 18,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: "#F7F1E8",
+  },
+  closeEditLineOne: { transform: [{ rotate: "45deg" }] },
+  closeEditLineTwo: { transform: [{ rotate: "-45deg" }] },
   streakBanner: {
-    minHeight: 44,
-    borderRadius: 14,
-    backgroundColor: "#B3F351",
+    minHeight: 58,
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.24)",
     overflow: "hidden",
     flexDirection: "row",
     alignItems: "center",
@@ -4467,7 +5445,7 @@ const styles = StyleSheet.create({
     borderRadius: 66,
     right: -38,
     top: -44,
-    backgroundColor: "rgba(10,17,14,0.10)",
+    backgroundColor: "rgba(143,234,106,0.14)",
   },
   streakCircleSmall: {
     position: "absolute",
@@ -4476,16 +5454,16 @@ const styles = StyleSheet.create({
     borderRadius: 41,
     left: -18,
     bottom: -28,
-    backgroundColor: "rgba(10,17,14,0.08)",
+    backgroundColor: "rgba(179,243,81,0.08)",
   },
   streakTextBlock: { gap: 2 },
-  streakLabel: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  streakLabel: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
   streakSubLabel: {
-    color: "rgba(10,17,14,0.62)",
+    color: "rgba(247,241,232,0.62)",
     fontSize: 10,
     fontWeight: "800",
   },
-  streakNumber: { color: "#0A110E", fontSize: 30, fontWeight: "900" },
+  streakNumber: { color: "#8FEA6A", fontSize: 30, fontWeight: "900" },
   profileHeroBody: { flexDirection: "row", alignItems: "center", gap: 12 },
   profileIdentity: { flex: 1, gap: 5 },
   avatarRing: {
@@ -4493,10 +5471,10 @@ const styles = StyleSheet.create({
     height: 86,
     borderRadius: 43,
     borderWidth: 3,
-    borderColor: "#B3F351",
+    borderColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(179,243,81,0.08)",
+    backgroundColor: "rgba(143,234,106,0.10)",
   },
   avatarCore: {
     width: 66,
@@ -4513,7 +5491,8 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     textAlign: "left",
   },
-  profileMeta: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
+  profileHandle: { color: "rgba(227,219,208,0.62)", fontSize: 12, fontWeight: "900" },
+  profileMeta: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
   profileBioText: {
     color: "rgba(227,219,208,0.72)",
     fontSize: 10,
@@ -4524,21 +5503,25 @@ const styles = StyleSheet.create({
   },
   nextMatchCard: {
     borderRadius: 26,
-    backgroundColor: "#B3F351",
+    backgroundColor: "rgba(143,234,106,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.26)",
     padding: 16,
     gap: 8,
     overflow: "hidden",
   },
-  nextMatchEyebrow: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  nextMatchTitle: { color: "#0A110E", fontSize: 22, fontWeight: "900" },
+  nextMatchEyebrow: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
+  nextMatchTitle: { color: "#F7F1E8", fontSize: 22, fontWeight: "900" },
   nextMatchMeta: {
-    color: "#263126",
+    color: "rgba(247,241,232,0.78)",
     fontSize: 10,
     fontWeight: "800",
     lineHeight: 17,
   },
   profileEditor: {
-    backgroundColor: "#E3DBD0",
+    backgroundColor: "rgba(7,12,9,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.14)",
     borderRadius: 24,
     padding: 14,
     gap: 14,
@@ -4548,12 +5531,14 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 44,
     borderRadius: 19,
-    backgroundColor: "#F6F1EA",
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
-  positionButtonActive: { backgroundColor: "#B3F351" },
-  positionButtonText: { color: "#4A4A4A", fontSize: 12, fontWeight: "900" },
+  positionButtonActive: { backgroundColor: "#8FEA6A", borderColor: "#8FEA6A" },
+  positionButtonText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
   positionButtonTextActive: { color: "#0A110E" },
   profileStats: { flexDirection: "row", gap: 8 },
   profileStat: {
@@ -4565,7 +5550,7 @@ const styles = StyleSheet.create({
     padding: 12,
     alignItems: "center",
   },
-  profileStatValue: { color: "#B3F351", fontSize: 20, fontWeight: "900" },
+  profileStatValue: { color: "#8FEA6A", fontSize: 20, fontWeight: "900" },
   profileStatLabel: {
     color: "#E3DBD0",
     fontSize: 11,
@@ -4598,7 +5583,7 @@ const styles = StyleSheet.create({
   compactMatchContent: { padding: 16, gap: 4 },
   compactMatchTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
   compactMatchMeta: { color: "rgba(227,219,208,0.82)", fontSize: 13 },
-  compactMatchPlace: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
+  compactMatchPlace: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
   createContent: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 760 : undefined,
@@ -4617,14 +5602,16 @@ const styles = StyleSheet.create({
   locationPickerShell: {
     flex: 1,
     minHeight: 360,
-    borderRadius: 19,
+    borderRadius: 28,
     overflow: "hidden",
-    backgroundColor: "#C8D2C4",
+    backgroundColor: "#000000",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.12)",
   },
   locationPickerMap: {
     flex: 1,
     overflow: "hidden",
-    backgroundColor: "#C8D2C4",
+    backgroundColor: "#000000",
   },
   locationSearchPanel: {
     position: "absolute",
@@ -4678,20 +5665,20 @@ const styles = StyleSheet.create({
   locationPickerZoom: { position: "absolute", right: 18, top: 70, gap: 8 },
   locationPickedMarker: {
     position: "absolute",
-    width: 36,
-    height: 44,
-    borderRadius: 18,
-    backgroundColor: "#B3F351",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#8FEA6A",
     borderWidth: 4,
-    borderColor: "#0A110E",
+    borderColor: "rgba(10,17,14,0.88)",
     alignItems: "center",
     justifyContent: "center",
   },
   locationPickedDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#0A110E",
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F7F1E8",
   },
   locationSummaryCard: {
     borderRadius: 18,
@@ -4716,23 +5703,46 @@ const styles = StyleSheet.create({
   },
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
   createCard: {
-    backgroundColor: "#E3DBD0",
-    borderRadius: 26,
-    padding: 14,
-    gap: 14,
+    backgroundColor: "rgba(7,12,9,0.92)",
+    borderRadius: 24,
+    padding: 12,
+    gap: 12,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.14)",
     shadowColor: "#000000",
     shadowOpacity: 0.22,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 12 },
   },
+  createCardBubbleOne: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    right: -62,
+    top: -70,
+    backgroundColor: "rgba(179,243,81,0.16)",
+  },
+  createCardBubbleTwo: {
+    position: "absolute",
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    left: -44,
+    bottom: -40,
+    backgroundColor: "rgba(227,219,208,0.08)",
+  },
   locationCreateCard: {
-    borderRadius: 22,
-    backgroundColor: "#0A110E",
-    padding: 14,
-    gap: 12,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    padding: 10,
+    gap: 10,
     borderWidth: 1,
-    borderColor: "rgba(10,17,14,0.08)",
+    borderColor: "rgba(247,241,232,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   locationCreateTitle: { color: "#F7F1E8", fontSize: 14, fontWeight: "900" },
   locationCreateMeta: {
@@ -4742,108 +5752,739 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   locationPickButton: {
-    minHeight: 44,
-    borderRadius: 19,
-    backgroundColor: "#B3F351",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#F7F1E8",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  locationPickText: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  locationPickText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   formRow: { flexDirection: "row", gap: 10 },
   formHalf: { flex: 1 },
+  calendarBlock: { gap: 7 },
+  dateSelectorCard: {
+    minHeight: 58,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dateSelectorLabel: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  dateSelectorValue: {
+    color: "#F7F1E8",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  dateSelectorAction: {
+    overflow: "hidden",
+    borderRadius: 16,
+    backgroundColor: "#8FEA6A",
+    color: "#0A110E",
+    fontSize: 11,
+    fontWeight: "900",
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+  },
+  calendarCard: {
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 9,
+    gap: 8,
+  },
+  calendarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  calendarNavButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "rgba(247,241,232,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarNavText: { color: "#F7F1E8", fontSize: 14, fontWeight: "900" },
+  calendarTitle: {
+    color: "#F7F1E8",
+    fontSize: 13,
+    fontWeight: "900",
+    textTransform: "capitalize",
+  },
+  calendarWeekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  calendarWeekText: {
+    width: "14.28%",
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
+  calendarGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    rowGap: 6,
+  },
+  calendarDayBlank: { width: "14.28%", height: 32 },
+  calendarDay: {
+    width: "14.28%",
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 16,
+  },
+  calendarDaySelected: { backgroundColor: "#8FEA6A" },
+  calendarDayDisabled: { opacity: 0.28 },
+  calendarDayText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  calendarDayTextSelected: { color: "#0A110E" },
+  calendarDayTextDisabled: { color: "rgba(247,241,232,0.40)" },
+  timeWheelBlock: { gap: 7 },
+  timeWheelCard: {
+    minHeight: 160,
+    borderRadius: 22,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    gap: 10,
+  },
+  timeWheelColumn: { flex: 1, gap: 7 },
+  timeWheelLabel: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
+  timeWheelScroll: { height: 120, maxHeight: 120 },
+  timeWheelContent: { gap: 0, paddingVertical: 40 },
+  timeWheelItem: {
+    height: 40,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.18)",
+  },
+  timeWheelItemActive: { backgroundColor: "#8FEA6A" },
+  timeWheelText: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  timeWheelTextActive: { color: "#0A110E" },
+  timeWheelSeparator: {
+    color: "#8FEA6A",
+    fontSize: 24,
+    fontWeight: "900",
+    marginTop: 14,
+  },
+  choiceBlock: { gap: 7 },
+  quickChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  quickChip: {
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    paddingHorizontal: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  quickChipActive: {
+    backgroundColor: "#8FEA6A",
+    borderColor: "#8FEA6A",
+  },
+  quickChipText: { color: "rgba(247,241,232,0.78)", fontSize: 11, fontWeight: "900" },
+  quickChipTextActive: { color: "#0A110E" },
+  createPreviewButton: {
+    minHeight: 52,
+    borderRadius: 22,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  createPreviewButtonText: {
+    color: "#0A110E",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  previewOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.58)",
+    justifyContent: "flex-end",
+  },
+  previewSheet: {
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: "#07120D",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.14)",
+    overflow: "hidden",
+    padding: 18,
+    paddingBottom: 24,
+    gap: 12,
+  },
+  previewBubbleOne: {
+    position: "absolute",
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    right: -60,
+    top: -74,
+    backgroundColor: "rgba(179,243,81,0.16)",
+  },
+  previewBubbleTwo: {
+    position: "absolute",
+    width: 106,
+    height: 106,
+    borderRadius: 53,
+    left: -44,
+    bottom: -42,
+    backgroundColor: "rgba(143,234,106,0.10)",
+  },
+  previewHandle: {
+    width: 48,
+    height: 5,
+    borderRadius: 5,
+    backgroundColor: "rgba(247,241,232,0.22)",
+    alignSelf: "center",
+    marginBottom: 4,
+  },
+  previewEyebrow: {
+    color: "#8FEA6A",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  previewTitle: { color: "#F7F1E8", fontSize: 28, fontWeight: "900" },
+  previewMeta: {
+    color: "rgba(247,241,232,0.72)",
+    fontSize: 14,
+    fontWeight: "800",
+    lineHeight: 20,
+  },
+  previewInfoGrid: { gap: 8 },
+  previewInfoCard: {
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 12,
+    gap: 3,
+  },
+  previewInfoLabel: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  previewInfoValue: { color: "#F7F1E8", fontSize: 14, fontWeight: "900" },
+  previewActions: { flexDirection: "row", gap: 10, marginTop: 4 },
+  previewSecondaryButton: {
+    flex: 1,
+    minHeight: 52,
+    borderRadius: 22,
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewSecondaryText: { color: "#F7F1E8", fontWeight: "900" },
+  previewPrimaryButton: {
+    flex: 1.25,
+    minHeight: 52,
+    borderRadius: 22,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewPrimaryText: { color: "#0A110E", fontWeight: "900" },
   detailContent: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 820 : undefined,
     alignSelf: "center",
-    paddingHorizontal: Platform.OS === "web" ? 24 : 22,
-    gap: 18,
+    paddingHorizontal: Platform.OS === "web" ? 24 : 16,
+    gap: 16,
   },
   detailHeroCard: {
-    backgroundColor: "#E3DBD0",
-    borderRadius: 19,
-    padding: 10,
+    backgroundColor: "rgba(7,12,9,0.94)",
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    shadowColor: "#000000",
+    shadowOpacity: 0.24,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 14 },
+  },
+  detailCover: {
+    minHeight: 238,
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#0A110E",
+  },
+  detailCoverImage: { opacity: 0.76 },
+  detailCoverOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(5,10,7,0.34)",
+  },
+  detailCoverTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     gap: 10,
   },
-  detailTitle: { color: "#0A110E", fontSize: 28, fontWeight: "900" },
-  detailMeta: { color: "#4A4A4A", fontSize: 14, lineHeight: 20 },
+  detailCoverPill: {
+    overflow: "hidden",
+    borderRadius: 18,
+    backgroundColor: "rgba(143,234,106,0.92)",
+    color: "#0A110E",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  detailCoverContent: { gap: 7 },
+  detailTitle: {
+    color: "#F7F1E8",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  detailSubtitle: {
+    color: "rgba(247,241,232,0.84)",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  detailBody: { padding: 12, gap: 12 },
+  detailInfoGrid: { flexDirection: "row", gap: 10 },
+  detailInfoCard: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    justifyContent: "center",
+    gap: 5,
+  },
+  detailInfoLabel: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  detailInfoValue: {
+    color: "#F7F1E8",
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
+  detailLocationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(143,234,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.18)",
+    padding: 12,
+  },
+  detailLocationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailLocationIconRing: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    borderWidth: 3,
+    borderColor: "#0A110E",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailLocationIconDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: "#0A110E",
+  },
+  detailLocationTextWrap: { flex: 1, gap: 3 },
+  detailLocationTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  detailLocationMeta: {
+    color: "rgba(247,241,232,0.70)",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+  detailOrganizer: {
+    color: "#8FEA6A",
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  detailSection: {
+    borderRadius: 24,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    gap: 10,
+  },
+  detailSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  detailSectionTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
+  detailSectionMeta: {
+    overflow: "hidden",
+    borderRadius: 14,
+    backgroundColor: "rgba(143,234,106,0.18)",
+    color: "#8FEA6A",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  detailActionPanel: {
+    borderRadius: 24,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    gap: 10,
+  },
+  detailActionTitle: {
+    color: "rgba(247,241,232,0.78)",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  directionsButton: {
+    minHeight: 46,
+    borderRadius: 20,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directionsButtonText: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
   teamGrid: { flexDirection: "row", gap: 10, marginTop: 4 },
   teamBox: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: "#F6F1EA",
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
     padding: 12,
     gap: 3,
   },
   teamBoxFull: { opacity: 0.62 },
-  teamBoxLabel: { color: "#4A4A4A", fontSize: 12, fontWeight: "900" },
-  teamBoxValue: { color: "#0A110E", fontSize: 24, fontWeight: "900" },
-  teamBoxMeta: { color: "#6C716D", fontSize: 11, fontWeight: "800" },
+  teamBoxLabel: { color: "rgba(247,241,232,0.62)", fontSize: 12, fontWeight: "900" },
+  teamBoxValue: { color: "#F7F1E8", fontSize: 24, fontWeight: "900" },
+  teamBoxMeta: { color: "#8FEA6A", fontSize: 11, fontWeight: "800" },
   rosterGrid: { flexDirection: "row", gap: 10, marginTop: 2 },
   rosterColumn: {
     flex: 1,
     borderRadius: 18,
-    backgroundColor: "rgba(10,17,14,0.08)",
+    backgroundColor: "rgba(10,17,14,0.34)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.08)",
     padding: 12,
     gap: 8,
   },
-  rosterTitle: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
-  rosterEmpty: { color: "#6C716D", fontSize: 12, fontWeight: "800" },
+  rosterTitle: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
+  rosterEmpty: { color: "rgba(247,241,232,0.54)", fontSize: 12, fontWeight: "800" },
   rosterPlayer: { flexDirection: "row", alignItems: "center", gap: 8 },
   rosterAvatar: {
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
   rosterAvatarText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  rosterName: { flex: 1, color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  chatPanel: { gap: 12 },
-  chatHeader: {
+  rosterName: { flex: 1, color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  actionButtonDisabled: { opacity: 0.46 },
+  publicProfileBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  publicProfileCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 30,
+    backgroundColor: "#07100A",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 18,
+    gap: 12,
+    shadowColor: "#000000",
+    shadowOpacity: 0.30,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+  },
+  publicProfileTop: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  chatTitle: { color: "#E3DBD0", fontSize: 22, fontWeight: "900" },
-  refreshText: { color: "#B3F351", fontSize: 13, fontWeight: "900" },
-  messageBubble: {
-    backgroundColor: "rgba(227,219,208,0.12)",
-    borderRadius: 18,
-    padding: 10,
+  publicProfileAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  publicProfileAvatarText: { color: "#0A110E", fontSize: 28, fontWeight: "900" },
+  publicProfileClose: {
+    minHeight: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  publicProfileCloseText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  publicProfileName: { color: "#F7F1E8", fontSize: 28, fontWeight: "900" },
+  publicProfileHandle: { color: "#8FEA6A", fontSize: 14, fontWeight: "900" },
+  publicProfileInfoGrid: { flexDirection: "row", gap: 10 },
+  publicProfileInfoCard: {
+    flex: 1,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
     gap: 4,
   },
-  messageAuthor: { color: "#B3F351", fontSize: 12, fontWeight: "900" },
-  messageContent: { color: "#E3DBD0", fontSize: 15, lineHeight: 21 },
-    messageTime: { color: "#9CA3AF", fontSize: 11, fontWeight: "700" },
+  publicProfileInfoLabel: {
+    color: "rgba(247,241,232,0.52)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  publicProfileInfoValue: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
+  publicProfileBio: {
+    color: "rgba(247,241,232,0.76)",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  publicProfileBioMuted: {
+    color: "rgba(247,241,232,0.46)",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "700",
+  },
+  detailChatLauncher: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 68,
+    borderRadius: 24,
+    backgroundColor: "rgba(143,234,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.22)",
+    paddingHorizontal: 12,
+  },
+  detailChatIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailChatBubbleShape: {
+    width: 24,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#0A110E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  detailChatDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#8FEA6A",
+  },
+  detailChatTextWrap: { flex: 1, gap: 3 },
+  detailChatTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  detailChatMeta: {
+    color: "rgba(247,241,232,0.64)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  detailChatOpenText: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
+  chatModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.56)",
+    justifyContent: "flex-end",
+  },
+  chatSheet: {
+    width: "100%",
+    maxWidth: Platform.OS === "web" ? 640 : undefined,
+    maxHeight: "82%",
+    alignSelf: "center",
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: "#07100A",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 16,
+    gap: 12,
+    shadowColor: "#000000",
+    shadowOpacity: 0.28,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: -12 },
+  },
+  chatHandle: {
+    width: 48,
+    height: 5,
+    borderRadius: 5,
+    backgroundColor: "rgba(247,241,232,0.18)",
+    alignSelf: "center",
+  },
+  chatHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  chatEyebrow: {
+    color: "#8FEA6A",
+    fontSize: 11,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  chatTitle: { color: "#F7F1E8", fontSize: 28, fontWeight: "900" },
+  chatHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  chatIconButton: {
+    minHeight: 38,
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  chatIconButtonText: {
+    color: "#F7F1E8",
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  chatCloseButton: {
+    minHeight: 38,
+    borderRadius: 18,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  chatCloseText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
+  chatMessages: { maxHeight: Platform.OS === "web" ? 420 : 360 },
+  chatMessagesContent: { gap: 10, paddingVertical: 4 },
+  chatEmptyCard: {
+    borderRadius: 22,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 16,
+    gap: 6,
+  },
+  chatEmptyTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
+  chatEmptyText: {
+    color: "rgba(247,241,232,0.66)",
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
+  },
+  messageBubble: {
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.08)",
+    padding: 12,
+    gap: 5,
+  },
+  messageAuthor: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
+  messageContent: { color: "#F7F1E8", fontSize: 15, lineHeight: 21 },
+  messageTime: { color: "rgba(247,241,232,0.46)", fontSize: 11, fontWeight: "700" },
   quickMessageRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   quickMessageButton: {
     minHeight: 34,
     borderRadius: 17,
-    backgroundColor: "rgba(227,219,208,0.12)",
+    backgroundColor: "rgba(143,234,106,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(227,219,208,0.14)",
+    borderColor: "rgba(143,234,106,0.22)",
     paddingHorizontal: 12,
     alignItems: "center",
     justifyContent: "center",
   },
   quickMessageDisabled: { opacity: 0.5 },
-  quickMessageText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
+  quickMessageText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
   messageComposer: { flexDirection: "row", gap: 10, alignItems: "center" },
   messageInput: {
     flex: 1,
     minHeight: 50,
     borderRadius: 25,
     paddingHorizontal: 12,
-    backgroundColor: "#E3DBD0",
-    color: "#0A110E",
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    color: "#F7F1E8",
     fontSize: 14,
   },
   sendButton: {
     minHeight: 50,
     paddingHorizontal: 14,
     borderRadius: 25,
-    backgroundColor: "#B3F351",
+    backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },

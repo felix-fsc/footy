@@ -44,7 +44,7 @@ public class MatchService {
 
     @Transactional(readOnly = true)
     public List<MatchResponse> listMatches() {
-        return matchRepository.findAllByStatusOrderByStartsAtAsc(MatchStatus.OPEN).stream()
+        return matchRepository.findAllByStatusInOrderByStartsAtAsc(List.of(MatchStatus.OPEN, MatchStatus.FULL)).stream()
                 .map(this::toResponseWithOccupancy)
                 .toList();
     }
@@ -70,7 +70,14 @@ public class MatchService {
         User creator = getUserOrUnauthorized(currentUserId);
 
         Field field = createField(request.field());
-        Match match = new Match(request.title().trim(), field, request.startsAt(), request.maxPlayersPerTeam(), creator);
+        Match match = new Match(
+                request.title().trim(),
+                field,
+                request.startsAt(),
+                request.maxPlayersPerTeam(),
+                request.pricePerPersonCents(),
+                blankToNull(request.coverImageUrl()),
+                creator);
 
         return toResponseWithOccupancy(matchRepository.save(match));
     }
@@ -100,7 +107,9 @@ public class MatchService {
                 .map(existingParticipation -> rejoin(existingParticipation, request))
                 .orElseGet(() -> new MatchParticipation(match, user, request.teamSide()));
 
-        return MatchParticipationMapper.toResponse(participationRepository.save(participation));
+        MatchParticipation savedParticipation = participationRepository.save(participation);
+        updateOpenOrFullStatus(match);
+        return MatchParticipationMapper.toResponse(savedParticipation);
     }
 
     @Transactional
@@ -111,8 +120,8 @@ public class MatchService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the match creator can cancel this match");
         }
 
-        if (match.getStatus() != MatchStatus.OPEN) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only open matches can be cancelled");
+        if (match.getStatus() != MatchStatus.OPEN && match.getStatus() != MatchStatus.FULL) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Only open or full matches can be cancelled");
         }
 
         match.cancel();
@@ -128,6 +137,7 @@ public class MatchService {
         }
 
         participation.leave();
+        updateOpenOrFullStatus(participation.getMatch());
     }
 
     private MatchResponse toResponseWithOccupancy(Match match) {
@@ -142,6 +152,21 @@ public class MatchService {
                 matchId,
                 teamSide,
                 ParticipationStatus.ACTIVE);
+    }
+
+    private void updateOpenOrFullStatus(Match match) {
+        if (match.getStatus() != MatchStatus.OPEN && match.getStatus() != MatchStatus.FULL) {
+            return;
+        }
+
+        long teamAPlayers = countActivePlayers(match.getId(), TeamSide.A);
+        long teamBPlayers = countActivePlayers(match.getId(), TeamSide.B);
+        boolean full = teamAPlayers >= match.getMaxPlayersPerTeam() && teamBPlayers >= match.getMaxPlayersPerTeam();
+        if (full) {
+            match.markFull();
+            return;
+        }
+        match.reopen();
     }
 
     private MatchParticipation rejoin(MatchParticipation participation, JoinMatchRequest request) {

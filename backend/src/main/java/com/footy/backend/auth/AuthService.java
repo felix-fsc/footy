@@ -56,7 +56,12 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Email already registered");
         }
 
-        User user = new User(email, passwordEncoder.encode(request.password()), request.displayName().trim());
+        String displayName = request.displayName().trim();
+        User user = new User(
+                email,
+                passwordEncoder.encode(request.password()),
+                displayName,
+                createUniqueUsername(displayName));
         User savedUser = userRepository.save(user);
 
         return createAuthResponse(savedUser);
@@ -71,7 +76,7 @@ public class AuthService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid credentials");
         }
 
-        return createAuthResponse(user);
+        return createAuthResponse(ensureUsername(user));
     }
 
     public AuthResponse loginWithGoogle(GoogleAuthRequest request) {
@@ -114,9 +119,10 @@ public class AuthService {
                 .orElseGet(() -> userRepository.save(new User(
                         email,
                         passwordEncoder.encode("GOOGLE:" + googleSubject),
-                        displayName)));
+                        displayName,
+                        createUniqueUsername(displayName))));
 
-        return createAuthResponse(user);
+        return createAuthResponse(ensureUsername(user));
     }
 
     private AuthResponse createAuthResponse(User user) {
@@ -130,11 +136,16 @@ public class AuthService {
                 .subject(user.getId().toString())
                 .claim("email", user.getEmail())
                 .claim("displayName", user.getDisplayName())
+                .claim("username", user.getUsername())
                 .build();
 
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).build();
         String token = jwtEncoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
-        return new AuthResponse(token, TOKEN_TYPE, expiresAt, new AuthUserResponse(user.getId(), user.getEmail(), user.getDisplayName()));
+        return new AuthResponse(
+                token,
+                TOKEN_TYPE,
+                expiresAt,
+                new AuthUserResponse(user.getId(), user.getEmail(), user.getDisplayName(), user.getUsername()));
     }
 
     private String normalizeEmail(String email) {
@@ -143,5 +154,40 @@ public class AuthService {
 
     private String asString(Object value) {
         return value == null ? "" : value.toString();
+    }
+
+    private User ensureUsername(User user) {
+        if (user.getUsername() != null && !user.getUsername().isBlank()) {
+            return user;
+        }
+        user.setUsername(createUniqueUsername(user.getDisplayName()));
+        return userRepository.save(user);
+    }
+
+    private String createUniqueUsername(String source) {
+        String base = normalizeUsername(source);
+        String candidate = base;
+        int suffix = 2;
+        while (userRepository.existsByUsernameIgnoreCase(candidate)) {
+            String suffixText = String.valueOf(suffix);
+            int maxBaseLength = Math.max(1, 30 - suffixText.length());
+            candidate = base.substring(0, Math.min(base.length(), maxBaseLength)) + suffixText;
+            suffix++;
+        }
+        return candidate;
+    }
+
+    private String normalizeUsername(String source) {
+        String normalized = source == null ? "" : source.toLowerCase()
+                .replaceAll("[^a-z0-9_]+", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_|_$", "");
+        if (normalized.length() < 3) {
+            normalized = "jugador";
+        }
+        if (normalized.length() > 30) {
+            normalized = normalized.substring(0, 30);
+        }
+        return normalized;
     }
 }

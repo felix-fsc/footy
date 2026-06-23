@@ -13,7 +13,8 @@ final class MessageMapper {
                 message.getMatch().getId(),
                 new MessageAuthorResponse(
                         message.getAuthor().getId(),
-                        message.getAuthor().getDisplayName()),
+                        message.getAuthor().getDisplayName(),
+                        message.getAuthor().getUsername()),
                 message.getContent(),
                 message.getSentAt());
     }

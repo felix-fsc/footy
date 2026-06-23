@@ -31,8 +31,13 @@ final class MatchMapper {
                 match.getTitle(),
                 match.getStartsAt(),
                 match.getMaxPlayersPerTeam(),
+                match.getPricePerPersonCents(),
+                match.getCoverImageUrl(),
                 match.getStatus(),
-                new MatchCreatorResponse(match.getCreatedBy().getId(), match.getCreatedBy().getDisplayName()),
+                new MatchCreatorResponse(
+                        match.getCreatedBy().getId(),
+                        match.getCreatedBy().getDisplayName(),
+                        match.getCreatedBy().getUsername()),
                 toFieldResponse(match.getField()),
                 new MatchOccupancyResponse(teamA.size(), teamB.size(), match.getMaxPlayersPerTeam()),
                 new MatchTeamsResponse(teamA, teamB));
@@ -43,6 +48,7 @@ final class MatchMapper {
                 participation.getId(),
                 participation.getUser().getId(),
                 participation.getUser().getDisplayName(),
+                participation.getUser().getUsername(),
                 participation.getTeamSide(),
                 participation.getJoinedAt());
     }

@@ -31,6 +31,9 @@ public class User extends AuditableEntity {
     @Column(nullable = false, length = 80)
     private String displayName;
 
+    @Column(unique = true, length = 30)
+    private String username;
+
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private PlayerProfile playerProfile;
 
@@ -41,6 +44,11 @@ public class User extends AuditableEntity {
         this.email = email;
         this.passwordHash = passwordHash;
         this.displayName = displayName;
+    }
+
+    public User(String email, String passwordHash, String displayName, String username) {
+        this(email, passwordHash, displayName);
+        this.username = username;
     }
 
     public UUID getId() {
@@ -57,6 +65,14 @@ public class User extends AuditableEntity {
 
     public String getDisplayName() {
         return displayName;
+    }
+
+    public String getUsername() {
+        return username;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
     }
 
     public PlayerProfile getPlayerProfile() {

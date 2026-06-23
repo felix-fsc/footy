@@ -5,6 +5,7 @@ import java.util.UUID;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,6 +26,11 @@ public class PlayerProfileController {
     @GetMapping("/me")
     PlayerProfileResponse getMyProfile(@AuthenticationPrincipal Jwt jwt) {
         return profileService.getMyProfile(UUID.fromString(jwt.getSubject()));
+    }
+
+    @GetMapping("/{userId}")
+    PlayerProfileResponse getPublicProfile(@PathVariable UUID userId) {
+        return profileService.getPublicProfile(userId);
     }
 
     @PutMapping("/me")
