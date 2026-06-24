@@ -43,6 +43,7 @@ import {
 type AuthMode = "login" | "register";
 type HomeMode = "map" | "list";
 type MatchFilter = "all" | "mine";
+type DateFilter = "today" | "tomorrow" | "week" | "all";
 type AppTab = "home" | "create" | "detail" | "profile" | "location";
 type TeamSide = "A" | "B";
 type UserRole = "PLAYER" | "ADMIN";
@@ -115,6 +116,18 @@ type MatchResponse = {
     teamB: MatchPlayerResponse[];
   };
 };
+
+type FieldMatchGroup = {
+  key: string;
+  fieldName: string;
+  latitude: number;
+  longitude: number;
+  matches: MatchResponse[];
+};
+
+
+
+
 type MessageResponse = {
   id: string;
   matchId: string;
@@ -329,7 +342,7 @@ const markerPositions = [
 const FOOTY_MAP_WIDTH = 6000;
 const FOOTY_MAP_HEIGHT = 6000;
 const FOOTY_MAP_PADDING = 120;
-const MARKER_SIZE = 28;
+const MARKER_SIZE = 44;
 const MAP_TILE_SIZE = 256;
 const MAP_DEFAULT_ZOOM = 13;
 const MAP_MIN_ZOOM = 11;
@@ -405,6 +418,8 @@ export default function App() {
 }
 
 function AppContent() {
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
   const safeInsets = useSafeAreaInsets();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [homeMode, setHomeMode] = useState<HomeMode>("map");
@@ -471,18 +486,88 @@ function AppContent() {
   const isLoggedIn = Boolean(token);
   const isAdmin = currentUserRole === "ADMIN";
   const visibleMatches = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return matches;
+  const query = searchQuery.trim().toLowerCase();
+  const now = new Date();
+
+  return matches.filter((match) => {
+    const field = match.field;
+    const matchDate = new Date(match.startsAt);
+
+    const isFutureOrNow =
+      Number.isFinite(matchDate.getTime()) && matchDate >= now;
+
+    if (!isFutureOrNow) {
+      return false;
     }
 
-    return matches.filter((match) => {
-      const field = match.field;
-      return [match.title, field?.name, field?.city, field?.address]
+    const matchesText =
+      !query ||
+      [match.title, field?.name, field?.city, field?.address]
         .filter(Boolean)
         .some((value) => value!.toLowerCase().includes(query));
-    });
-  }, [matches, searchQuery]);
+
+    const matchesMine =
+      matchFilter === "all" ||
+      myMatches.some((myMatch) => myMatch.id === match.id);
+
+    const matchesDate = filterMatchByDate(match, dateFilter, now);
+
+    const matchesAvailability =
+      !onlyAvailable ||
+      (match.status === "OPEN" &&
+        match.occupancy.totalPlayers < match.occupancy.totalCapacity);
+
+    return matchesText && matchesMine && matchesDate && matchesAvailability;
+  });
+}, [matches, myMatches, searchQuery, matchFilter, dateFilter, onlyAvailable]);
+
+
+function filterMatchByDate(
+  match: MatchResponse,
+  filter: DateFilter,
+  now: Date,
+) {
+  const matchDate = new Date(match.startsAt);
+
+  if (filter === "all") {
+    return true;
+  }
+
+  if (filter === "today") {
+    return isSameDay(matchDate, now);
+  }
+
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+
+  if (filter === "tomorrow") {
+    return isSameDay(matchDate, tomorrow);
+  }
+
+  if (filter === "week") {
+    const end = new Date(now);
+    end.setDate(now.getDate() + 7);
+    return matchDate >= startOfDay(now) && matchDate <= end;
+  }
+
+  return true;
+}
+
+function isSameDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
+function startOfDay(date: Date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+
 
   const selectedMatch = selectedMatchId
     ? (visibleMatches.find((match) => match.id === selectedMatchId) ?? null)
@@ -2801,16 +2886,63 @@ function MapHome({
     () => getVisibleTiles(mapCenter, zoom, canvasWidth, canvasHeight),
     [canvasHeight, canvasWidth, mapCenter, zoom],
   );
+
+
+const fieldGroups = useMemo(() => {
+  const groups = new Map<string, FieldMatchGroup>();
+
+  matches.forEach((match) => {
+    const location = getMatchLocation(match);
+
+    if (!location) {
+      return;
+    }
+
+    const field = match.field;
+
+    const key =
+      field?.id ??
+      `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
+
+    const current = groups.get(key);
+
+    if (current) {
+      current.matches.push(match);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      fieldName: field?.name ?? "Pista sin nombre",
+      latitude: location.latitude,
+      longitude: location.longitude,
+      matches: [match],
+    });
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    matches: group.matches.sort(
+      (a, b) =>
+        new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+    ),
+  }));
+}, [matches]);
+
+
+
   const markerCoordinates = useMemo(
-    () =>
-      matches.map((match, index) => {
-        const location = getMatchLocation(match);
-        return location
-          ? projectLocation(location, mapData.topLeft, zoom)
-          : getFallbackMapPoint(index, canvasWidth, canvasHeight);
-      }),
-    [canvasHeight, canvasWidth, mapData.topLeft, matches, zoom],
-  );
+  () =>
+    fieldGroups.map((group, index) => {
+      const location = {
+        latitude: group.latitude,
+        longitude: group.longitude,
+      };
+
+      return projectLocation(location, mapData.topLeft, zoom);
+    }),
+  [fieldGroups, mapData.topLeft, zoom],
+);
 
   function commitDrag(nextOffset: { x: number; y: number }) {
     if (nextOffset.x === 0 && nextOffset.y === 0) {
@@ -2841,9 +2973,10 @@ function MapHome({
     });
 
     if (hitIndex >= 0) {
-      onSelect(matches[hitIndex].id);
-      return;
-    }
+  const group = fieldGroups[hitIndex];
+  onSelect(group.matches[0].id);
+  return;
+}
 
     onClearSelection();
   }
@@ -2924,7 +3057,7 @@ function MapHome({
           );
         },
       }),
-    [canvasLeft, canvasTop, mapCenter, markerCoordinates, matches, zoom],
+    [canvasLeft, canvasTop, mapCenter, markerCoordinates, fieldGroups, zoom],
   );
 
   const mapWheelProps =
@@ -3045,25 +3178,26 @@ function MapHome({
           <Pressable style={StyleSheet.absoluteFill} onPress={clearSelectionFromMap}>
             <View pointerEvents="none" style={styles.mapOverlay} />
           </Pressable>
-          {matches.map((match, index) => {
-            const coordinate = markerCoordinates[index];
-            const active = match.id === selectedMatchId;
-            return (
-              <Pressable
-                key={match.id}
-                hitSlop={12}
-                onPress={() => {
-                  suppressNextMapClear.current = true;
-                  onSelect(match.id);
-                }}
-                style={[
-                  styles.mapMarkerWrap,
-                  {
-                    left: coordinate.left - MARKER_SIZE / 2,
-                    top: coordinate.top - MARKER_SIZE / 2,
-                  },
-                ]}
-              >
+          {fieldGroups.map((group, index) => {
+  const coordinate = markerCoordinates[index];
+  const firstMatch = group.matches[0];
+  const active = group.matches.some((match) => match.id === selectedMatchId);
+
+  return (
+    <Pressable
+      key={group.key}
+      onPress={() => {
+        suppressNextMapClear.current = true;
+        onSelect(firstMatch.id);
+      }}
+      style={[
+        styles.mapMarkerWrap,
+        {
+          left: coordinate.left - MARKER_SIZE / 2,
+          top: coordinate.top - MARKER_SIZE / 2,
+        },
+      ]}
+    >
                 <View
                   style={[
                     styles.mapMarkerHalo,
@@ -3071,10 +3205,25 @@ function MapHome({
                   ]}
                 />
                 <View
-                  style={[styles.mapMarkerPin, active && styles.mapMarkerPinActive]}
-                >
-                  <View style={styles.mapMarkerDot} />
-                </View>
+  style={[
+    styles.mapMarkerPin,
+    active && styles.mapMarkerPinActive,
+    group.matches.length > 1 && styles.mapMarkerClusterPin,
+  ]}
+>
+  {group.matches.length > 1 ? (
+    <Text style={styles.mapMarkerCount}>{group.matches.length}</Text>
+  ) : (
+    <Text style={styles.mapMarkerBall}>⚽</Text>
+  )}
+</View>
+
+<View
+  style={[
+    styles.mapMarkerTail,
+    active && styles.mapMarkerTailActive,
+  ]}
+/>
               </Pressable>
             );
           })}
@@ -5252,50 +5401,99 @@ const styles = StyleSheet.create({
   },
   mapLoadingText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   mapMarkerWrap: {
-    position: "absolute",
-    width: 28,
-    height: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 12,
-  },
-  mapMarkerHalo: {
-    position: "absolute",
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "rgba(127,239,155,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(127,239,155,0.22)",
-  },
-  mapMarkerHaloActive: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "rgba(127,239,155,0.18)",
-    borderColor: "#7FEF9B",
-  },
-  mapMarkerPin: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#7FEF9B",
-    borderWidth: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  mapMarkerPinActive: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: "#B8FFD0",
-  },
-  mapMarkerDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#0A110E",
-  },
+  position: "absolute",
+  width: 44,
+  height: 52,
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 12,
+},
+
+mapMarkerHalo: {
+  position: "absolute",
+  top: 3,
+  width: 42,
+  height: 42,
+  borderRadius: 21,
+  backgroundColor: "rgba(143,234,106,0.18)",
+  borderWidth: 1,
+  borderColor: "rgba(143,234,106,0.35)",
+},
+
+mapMarkerHaloActive: {
+  width: 50,
+  height: 50,
+  borderRadius: 25,
+  top: -1,
+  backgroundColor: "rgba(143,234,106,0.28)",
+  borderColor: "#8FEA6A",
+},
+
+mapMarkerPin: {
+  width: 34,
+  height: 34,
+  borderRadius: 17,
+  backgroundColor: "#8FEA6A",
+  borderWidth: 3,
+  borderColor: "#0A110E",
+  alignItems: "center",
+  justifyContent: "center",
+  shadowColor: "#000000",
+  shadowOpacity: 0.35,
+  shadowRadius: 8,
+  shadowOffset: { width: 0, height: 5 },
+  elevation: 8,
+},
+
+mapMarkerPinActive: {
+  width: 38,
+  height: 38,
+  borderRadius: 19,
+  backgroundColor: "#B8FFD0",
+  borderColor: "#F7F1E8",
+},
+
+mapMarkerClusterPin: {
+  width: 38,
+  height: 38,
+  borderRadius: 19,
+  backgroundColor: "#F7F1E8",
+  borderColor: "#8FEA6A",
+},
+
+mapMarkerTail: {
+  marginTop: -3,
+  width: 0,
+  height: 0,
+  borderLeftWidth: 7,
+  borderRightWidth: 7,
+  borderTopWidth: 10,
+  borderLeftColor: "transparent",
+  borderRightColor: "transparent",
+  borderTopColor: "#0A110E",
+},
+
+mapMarkerTailActive: {
+  borderTopColor: "#F7F1E8",
+},
+
+mapMarkerDot: {
+  width: 4,
+  height: 4,
+  borderRadius: 2,
+  backgroundColor: "#0A110E",
+},
+
+mapMarkerBall: {
+  fontSize: 16,
+  lineHeight: 18,
+},
+
+mapMarkerCount: {
+  color: "#0A110E",
+  fontSize: 15,
+  fontWeight: "900",
+},
   popupCard: {
     position: "absolute",
     left: Platform.OS === "web" ? "50%" : 16,
