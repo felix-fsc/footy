@@ -161,10 +161,7 @@ type PlayerProfileResponse = {
   city: string | null;
 };
 
-const API_BASE_URL =
-  Platform.OS === "web"
-    ? "http://localhost:8080"
-    : "https://footy-backend-576b.onrender.com";
+const API_BASE_URL = "https://footy-backend-576b.onrender.com";
 
 const SESSION_STORAGE_KEY = "footy.session.v1";
 const INTRO_VIDEO = require("./assets/intro.mp4");
@@ -344,7 +341,7 @@ const FOOTY_MAP_HEIGHT = 6000;
 const FOOTY_MAP_PADDING = 120;
 const MARKER_SIZE = 44;
 const MAP_TILE_SIZE = 256;
-const MAP_DEFAULT_ZOOM = 13;
+const MAP_DEFAULT_ZOOM = 14;
 const MAP_MIN_ZOOM = 11;
 const MAP_MAX_ZOOM = 17;
 const DEFAULT_MAP_CENTER = { latitude: 37.26142, longitude: -6.94472 };
