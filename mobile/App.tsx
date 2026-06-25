@@ -13,6 +13,7 @@ import {
 WebBrowser.maybeCompleteAuthSession();
 import {
   ComponentProps,
+  ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -394,8 +395,43 @@ function getRandomMatchCover() {
   return MATCH_COVER_IMAGES[index] ?? DEFAULT_MATCH_COVER;
 }
 
+function getFallbackMatchCover(match: MatchResponse) {
+  const seed = match.id || match.title || match.startsAt;
+  const hash = Array.from(seed).reduce(
+    (sum, character) => sum + character.charCodeAt(0),
+    0,
+  );
+  return MATCH_COVER_IMAGES[hash % MATCH_COVER_IMAGES.length] ?? DEFAULT_MATCH_COVER;
+}
+
 function getMatchCover(match: MatchResponse) {
-  return match.coverImageUrl || DEFAULT_MATCH_COVER;
+  return match.coverImageUrl || getFallbackMatchCover(match);
+}
+
+function MatchImageBackground({
+  match,
+  style,
+  imageStyle,
+  children,
+}: {
+  match: MatchResponse;
+  style: ComponentProps<typeof ImageBackground>["style"];
+  imageStyle?: ComponentProps<typeof ImageBackground>["imageStyle"];
+  children: ReactNode;
+}) {
+  const [useFallback, setUseFallback] = useState(false);
+  const source = useFallback ? getFallbackMatchCover(match) : getMatchCover(match);
+
+  return (
+    <ImageBackground
+      source={{ uri: source }}
+      style={style}
+      imageStyle={imageStyle}
+      onError={() => setUseFallback(true)}
+    >
+      {children}
+    </ImageBackground>
+  );
 }
 
 function publicHandle(user?: { displayName?: string | null; username?: string | null }) {
@@ -783,6 +819,10 @@ function startOfDay(date: Date) {
           setProfileEditing(false);
           return true;
         }
+        if (appTab === "home" && selectedMatchId) {
+          setSelectedMatchId(null);
+          return true;
+        }
         if (appTab === "location") {
           setAppTab("create");
           return true;
@@ -799,6 +839,7 @@ function startOfDay(date: Date) {
   }, [
     appTab,
     profileEditing,
+    selectedMatchId,
     showCreateCalendar,
     showCreatePreview,
     showMatchChat,
@@ -1919,8 +1960,8 @@ function startOfDay(date: Date) {
           {selectedMatch ? (
             <>
               <View style={styles.detailHeroCard}>
-                <ImageBackground
-                  source={{ uri: getMatchCover(selectedMatch) }}
+                <MatchImageBackground
+                  match={selectedMatch}
                   style={styles.detailCover}
                   imageStyle={styles.detailCoverImage}
                 >
@@ -1939,7 +1980,7 @@ function startOfDay(date: Date) {
                       {selectedMatch.field?.name ?? "Campo por confirmar"}
                     </Text>
                   </View>
-                </ImageBackground>
+                </MatchImageBackground>
 
                 <View style={styles.detailBody}>
                   <View style={styles.detailInfoGrid}>
@@ -2396,8 +2437,6 @@ function startOfDay(date: Date) {
                 onSelect={setSelectedMatchId}
                 onClearSelection={() => setSelectedMatchId(null)}
                 onOpenDetail={openDetail}
-                onDirections={openDirections}
-                onJoin={joinMatch}
                 loading={loading}
               />
             ) : (
@@ -2805,8 +2844,6 @@ function MapHome({
   onSelect,
   onClearSelection,
   onOpenDetail,
-  onDirections,
-  onJoin,
   loading,
 }: {
   matches: MatchResponse[];
@@ -2817,8 +2854,6 @@ function MapHome({
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onOpenDetail: (id: string) => void;
-  onDirections: (match: MatchResponse) => void;
-  onJoin: (id: string, team: TeamSide) => void;
   loading: boolean;
 }) {
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
@@ -2835,7 +2870,6 @@ function MapHome({
   const panStart = useRef(dragOffset);
   const movedDuringGesture = useRef(false);
   const latestDragOffset = useRef(dragOffset);
-  const suppressNextMapClear = useRef(false);
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(MAP_DEFAULT_ZOOM);
   const pinchActive = useRef(false);
@@ -2941,6 +2975,18 @@ const fieldGroups = useMemo(() => {
   [fieldGroups, mapData.topLeft, zoom],
 );
 
+  const selectedFieldGroup = useMemo(() => {
+    if (!selectedMatchId) {
+      return null;
+    }
+
+    return (
+      fieldGroups.find((group) =>
+        group.matches.some((match) => match.id === selectedMatchId),
+      ) ?? null
+    );
+  }, [fieldGroups, selectedMatchId]);
+
   function commitDrag(nextOffset: { x: number; y: number }) {
     if (nextOffset.x === 0 && nextOffset.y === 0) {
       return;
@@ -2979,10 +3025,6 @@ const fieldGroups = useMemo(() => {
   }
 
   function clearSelectionFromMap() {
-    if (suppressNextMapClear.current) {
-      suppressNextMapClear.current = false;
-      return;
-    }
     onClearSelection();
   }
 
@@ -3184,7 +3226,6 @@ const fieldGroups = useMemo(() => {
     <Pressable
       key={group.key}
       onPress={() => {
-        suppressNextMapClear.current = true;
         onSelect(firstMatch.id);
       }}
       style={[
@@ -3255,10 +3296,8 @@ const fieldGroups = useMemo(() => {
       {selectedMatch ? (
         <SelectedPopup
           match={selectedMatch}
+          matches={selectedFieldGroup?.matches ?? [selectedMatch]}
           onOpenDetail={onOpenDetail}
-          onDirections={onDirections}
-          onJoin={onJoin}
-          onClose={onClearSelection}
           loading={loading}
         />
       ) : null}
@@ -3595,10 +3634,8 @@ function ListHome({
                 onOpenDetail(match.id);
               }}
             >
-              <ImageBackground
-                source={{
-                  uri: getMatchCover(match),
-                }}
+              <MatchImageBackground
+                match={match}
                 imageStyle={styles.listCardImage}
                 style={styles.listCardImageWrap}
               >
@@ -3626,10 +3663,7 @@ function ListHome({
                   </Text>
                   <OccupancyBar match={match} />
                 </View>
-                <View style={styles.listDetailButton}>
-                  <Text style={styles.listDetailText}>Ver detalle</Text>
-                </View>
-              </ImageBackground>
+              </MatchImageBackground>
             </Pressable>
           );
         })
@@ -3639,83 +3673,160 @@ function ListHome({
 }
 function SelectedPopup({
   match,
+  matches,
   onOpenDetail,
-  onDirections,
-  onJoin,
-  onClose,
   loading,
 }: {
   match: MatchResponse;
+  matches: MatchResponse[];
   onOpenDetail: (id: string) => void;
-  onDirections: (match: MatchResponse) => void;
-  onJoin: (id: string, team: TeamSide) => void;
-  onClose: () => void;
   loading: boolean;
 }) {
-  return (
-    <View style={styles.popupCard}>
-      <ImageBackground
-        source={{
-          uri: getMatchCover(match),
-        }}
-        style={styles.popupImageWrap}
-        imageStyle={styles.popupImage}
-      >
-        <View style={styles.popupImageOverlay} />
+  const groupedMatches = matches.length > 0 ? matches : [match];
+  const hasMultipleMatches = groupedMatches.length > 1;
+  const fieldName = match.field?.name ?? "Campo por confirmar";
+  const fieldCity = match.field?.city ?? "Sin ciudad";
+  const fieldTitle = fieldCity ? `${fieldName} - ${fieldCity}` : fieldName;
+  const popupEventProps =
+    Platform.OS === "web"
+      ? ({
+          onWheel: (event: {
+            stopPropagation?: () => void;
+            nativeEvent?: { stopPropagation?: () => void };
+          }) => {
+            event.stopPropagation?.();
+            event.nativeEvent?.stopPropagation?.();
+          },
+        } as object)
+      : {};
+
+  const popupContent = (
+    <>
+      {hasMultipleMatches ? (
         <View style={styles.popupHeaderRow}>
-          <View>
-            <Text style={styles.popupLabel}>Partido seleccionado</Text>
-            <Text style={styles.popupMetaLight}>{formatDate(match.startsAt)}</Text>
-          </View>
-          <View style={styles.popupHeaderActions}>
-            <StatusBadge status={match.status} />
-            <Pressable style={styles.popupCloseButton} onPress={onClose}>
-              <Text style={styles.popupCloseText}>x</Text>
-            </Pressable>
+          <View style={styles.popupHeaderText}>
+            <Text style={styles.popupLabel}>{groupedMatches.length} partidos</Text>
+            <Text style={styles.popupHeaderTitle} numberOfLines={1}>
+              {fieldTitle}
+            </Text>
           </View>
         </View>
-        <View style={styles.popupBody}>
-          <Text style={styles.popupTitle}>{match.title}</Text>
-          <Text style={styles.popupMeta}>
-            {match.field?.name ?? "Campo por confirmar"} -{" "}
-            {match.field?.city ?? "Sin ciudad"}
-          </Text>
-          <Text style={styles.popupPrice}>
-            {formatPriceFromCents(match.pricePerPersonCents)} por persona
-          </Text>
-          <OccupancyBar match={match} />
-          <View style={styles.popupActions}>
-            <Pressable
-              style={styles.popupDarkButton}
-              onPress={() => onOpenDetail(match.id)}
-              disabled={loading}
-            >
-              <Text style={styles.popupDarkText}>Ver detalle</Text>
-            </Pressable>
-            <Pressable
-              style={styles.popupDarkButton}
-              onPress={() => onDirections(match)}
-              disabled={loading}
-            >
-              <Text style={styles.popupDarkText}>Como llegar</Text>
-            </Pressable>
-            <Pressable
-              style={styles.popupLimeButton}
-              onPress={() => onJoin(match.id, "A")}
-              disabled={loading || !isMatchOpen(match) || isTeamFull(match, "A")}
-            >
-              <Text style={styles.popupLimeText}>
-                {match.status === "FULL"
-                  ? "Completo"
-                  : isMatchOpen(match)
-                    ? "Unirme"
-                    : "Cerrado"}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      </ImageBackground>
+      ) : null}
+      <View style={styles.popupBody}>
+        {hasMultipleMatches ? (
+          <ScrollView
+            style={styles.popupMatchList}
+            contentContainerStyle={styles.popupMatchListContent}
+            showsVerticalScrollIndicator={groupedMatches.length > 3}
+          >
+            {groupedMatches.map((item) => (
+              <Pressable
+                key={item.id}
+                style={styles.popupMatchOption}
+                onPress={() => onOpenDetail(item.id)}
+                disabled={loading}
+              >
+                <MatchImageBackground
+                  match={item}
+                  style={styles.popupMatchOptionImage}
+                  imageStyle={styles.popupMatchOptionImageStyle}
+                >
+                  <View style={styles.popupMatchOptionOverlay} />
+                  <PopupMatchContent match={item} />
+                </MatchImageBackground>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <Pressable
+            style={styles.popupSingleOption}
+            onPress={() => onOpenDetail(match.id)}
+            disabled={loading}
+          >
+            <PopupMatchContent match={match} showField showTitleLocation />
+          </Pressable>
+        )}
+      </View>
+    </>
+  );
+
+  return (
+    <View style={styles.popupCard} {...popupEventProps}>
+      {hasMultipleMatches ? (
+        <View style={styles.popupPlainWrap}>{popupContent}</View>
+      ) : (
+        <MatchImageBackground
+          match={match}
+          style={styles.popupImageWrap}
+          imageStyle={styles.popupImage}
+        >
+          <View style={styles.popupImageOverlay} />
+          {popupContent}
+        </MatchImageBackground>
+      )}
     </View>
+  );
+}
+
+function PopupMatchContent({
+  match,
+  showField = false,
+  showTitleLocation = false,
+}: {
+  match: MatchResponse;
+  showField?: boolean;
+  showTitleLocation?: boolean;
+}) {
+  const locationText = [match.field?.name, match.field?.city]
+    .filter(Boolean)
+    .join(" - ");
+  const startDate = new Date(match.startsAt);
+  const dateText = startDate.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "short",
+  });
+  const timeText = startDate.toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return (
+    <>
+      <View style={styles.popupMatchTitleRow}>
+        <View style={styles.popupMatchTitleBlock}>
+          <Text style={styles.popupMatchTitle} numberOfLines={1}>
+            {match.title}
+          </Text>
+        </View>
+        <StatusBadge status={match.status} />
+      </View>
+      {showField && showTitleLocation ? (
+        <Text style={styles.popupMatchPlace} numberOfLines={1}>
+          {locationText || "Campo por confirmar"}
+        </Text>
+      ) : null}
+      <View style={styles.popupMatchBubbleRow}>
+        <View style={styles.popupMatchBubble}>
+          <Text style={styles.popupMatchBubbleLabel}>Fecha</Text>
+          <Text style={styles.popupMatchBubbleValue}>
+            {dateText}
+          </Text>
+        </View>
+        <View style={styles.popupMatchBubble}>
+          <Text style={styles.popupMatchBubbleLabel}>Hora</Text>
+          <Text style={styles.popupMatchBubbleValue}>
+            {timeText}
+          </Text>
+        </View>
+        <View style={styles.popupMatchBubble}>
+          <Text style={styles.popupMatchBubbleLabel}>Precio</Text>
+          <Text style={styles.popupMatchBubbleValue}>
+            {formatPriceFromCents(match.pricePerPersonCents)}
+          </Text>
+        </View>
+      </View>
+      <OccupancyBar match={match} compact />
+    </>
   );
 }
 
@@ -3827,7 +3938,13 @@ function MapLines() {
   );
 }
 
-function OccupancyBar({ match }: { match: MatchResponse }) {
+function OccupancyBar({
+  match,
+  compact = false,
+}: {
+  match: MatchResponse;
+  compact?: boolean;
+}) {
   const occupancy = match.occupancy;
   const totalCapacity = occupancy?.totalCapacity ?? match.maxPlayersPerTeam * 2;
   const totalPlayers = occupancy?.totalPlayers ?? 0;
@@ -3835,13 +3952,22 @@ function OccupancyBar({ match }: { match: MatchResponse }) {
     totalCapacity > 0 ? Math.min(100, (totalPlayers / totalCapacity) * 100) : 0;
 
   return (
-    <View style={styles.occupancyBlock}>
-      <View style={styles.occupancyTrack}>
+    <View style={[styles.occupancyBlock, compact && styles.occupancyBlockCompact]}>
+      <View style={styles.occupancyBarRow}>
+        <View style={styles.occupancyTrack}>
         <View style={[styles.occupancyFill, { width: `${percentage}%` }]} />
+        </View>
+        {compact ? (
+          <Text style={styles.occupancyInlineText}>
+            {totalPlayers}/{totalCapacity}
+          </Text>
+        ) : null}
       </View>
-      <Text style={styles.occupancyText}>
-        {totalPlayers}/{totalCapacity} jugadores
-      </Text>
+      {compact ? null : (
+        <Text style={styles.occupancyText}>
+          {totalPlayers}/{totalCapacity} jugadores
+        </Text>
+      )}
     </View>
   );
 }
@@ -4504,10 +4630,8 @@ function CompactMatch({
 }) {
   return (
     <Pressable style={styles.compactMatch} onPress={onPress}>
-      <ImageBackground
-        source={{
-          uri: getMatchCover(match),
-        }}
+      <MatchImageBackground
+        match={match}
         imageStyle={styles.compactMatchImage}
         style={styles.compactMatchImageWrap}
       >
@@ -4522,7 +4646,7 @@ function CompactMatch({
             {match.field?.city ?? "Sin ciudad"}
           </Text>
         </View>
-      </ImageBackground>
+      </MatchImageBackground>
     </Pressable>
   );
 }
@@ -5497,7 +5621,8 @@ mapMarkerCount: {
     right: Platform.OS === "web" ? undefined : 16,
     width: Platform.OS === "web" ? 420 : undefined,
     transform: Platform.OS === "web" ? [{ translateX: -210 }] : undefined,
-    bottom: Platform.OS === "android" ? 82 : 78,
+    bottom: Platform.OS === "android" ? 112 : 108,
+    maxHeight: Platform.OS === "web" ? 520 : "72%",
     borderRadius: 26,
     backgroundColor: "#0A110E",
     overflow: "hidden",
@@ -5509,79 +5634,144 @@ mapMarkerCount: {
     shadowOffset: { width: 0, height: 14 },
     zIndex: 22,
   },
-  popupImageWrap: { minHeight: 238, padding: 14, justifyContent: "space-between" },
-  popupImage: { borderRadius: 26, opacity: 0.66 },
+  popupImageWrap: {
+    minHeight: 0,
+    padding: 12,
+    justifyContent: "flex-start",
+    gap: 10,
+  },
+  popupPlainWrap: {
+    minHeight: 0,
+    padding: 12,
+    justifyContent: "flex-start",
+    gap: 10,
+    backgroundColor: "rgba(10,17,14,0.94)",
+  },
+  popupImage: { borderRadius: 26, opacity: 0.82 },
   popupImageOverlay: {
     position: "absolute",
     left: 0,
     right: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: "rgba(10,17,14,0.66)",
+    backgroundColor: "rgba(10,17,14,0.48)",
   },
-  popupBody: { gap: 9 },
+  popupBody: { gap: 8, minHeight: 0 },
   popupHeaderRow: {
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
   },
-  popupHeaderActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  popupCloseButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(247,241,232,0.16)",
-    alignItems: "center",
-    justifyContent: "center",
+  popupHeaderText: {
+    flex: 1,
+    gap: 2,
   },
-  popupCloseText: { color: "#F7F1E8", fontSize: 16, fontWeight: "900" },
   popupLabel: {
     color: "#8FEA6A",
     fontSize: 10,
     fontWeight: "900",
     textTransform: "uppercase",
   },
-  popupTitle: { color: "#F7F1E8", fontSize: 25, fontWeight: "900" },
+  popupHeaderTitle: {
+    color: "#F7F1E8",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  popupTitle: { color: "#F7F1E8", fontSize: 22, fontWeight: "900" },
   popupMeta: { color: "rgba(247,241,232,0.84)", fontSize: 13, lineHeight: 19 },
-  popupPrice: {
-    alignSelf: "flex-start",
+  popupMatchList: {
+    maxHeight: Platform.OS === "web" ? 390 : 320,
+    marginTop: 0,
+  },
+  popupMatchListContent: { paddingBottom: 2 },
+  popupSingleOption: {
+    gap: 5,
+  },
+  popupMatchOption: {
+    minHeight: 112,
+    marginBottom: 8,
+    borderRadius: 18,
+    backgroundColor: "rgba(10,17,14,0.48)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.14)",
     overflow: "hidden",
-    borderRadius: 15,
-    backgroundColor: "rgba(143,234,106,0.16)",
-    color: "#E4FFD8",
+  },
+  popupMatchOptionImage: {
+    minHeight: 112,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 10,
+    justifyContent: "flex-start",
+  },
+  popupMatchOptionImageStyle: {
+    borderRadius: 18,
+    opacity: 0.76,
+  },
+  popupMatchOptionOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(10,17,14,0.44)",
+  },
+  popupMatchTitleRow: {
+    minHeight: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  popupMatchTitleBlock: {
+    flex: 1,
+    gap: 0,
+  },
+  popupMatchTitle: {
+    color: "#F7F1E8",
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 17,
+  },
+  popupMatchPlace: {
+    color: "rgba(247,241,232,0.72)",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 13,
+    marginTop: -7,
+  },
+  popupMatchBubbleRow: {
+    flexDirection: "row",
+    gap: 7,
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  popupMatchBubble: {
+    flex: 1,
+    minWidth: 0,
+    maxWidth: 104,
+    minHeight: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(10,17,14,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.22)",
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  popupMatchBubbleLabel: {
+    color: "rgba(247,241,232,0.62)",
+    fontSize: 8,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  popupMatchBubbleValue: {
+    color: "#F7F1E8",
     fontSize: 11,
     fontWeight: "900",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    marginTop: 0,
   },
-  popupMetaLight: {
-    color: "rgba(247,241,232,0.72)",
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 3,
-  },
-  popupActions: { flexDirection: "row", gap: 10, marginTop: 4 },
-  popupDarkButton: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 20,
-    backgroundColor: "rgba(247,241,232,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  popupDarkText: { color: "#F7F1E8", fontWeight: "900" },
-  popupLimeButton: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 20,
-    backgroundColor: "#8FEA6A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  popupLimeText: { color: "#0A110E", fontWeight: "900" },
   listContent: {
     paddingHorizontal: 14,
     paddingTop: 8,
@@ -5743,18 +5933,15 @@ mapMarkerCount: {
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  listDetailButton: {
-    alignSelf: "flex-start",
-    minHeight: 32,
-    borderRadius: 14,
-    backgroundColor: "rgba(179,243,81,0.94)",
-    paddingHorizontal: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  listDetailText: { color: "#0A110E", fontSize: 11, fontWeight: "900" },
   occupancyBlock: { marginTop: 4, gap: 5 },
+  occupancyBlockCompact: { marginTop: 0, gap: 0 },
+  occupancyBarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   occupancyTrack: {
+    flex: 1,
     height: 8,
     borderRadius: 8,
     backgroundColor: "rgba(227,219,208,0.24)",
@@ -5764,6 +5951,13 @@ mapMarkerCount: {
   occupancyText: {
     color: "rgba(227,219,208,0.90)",
     fontSize: 9,
+    fontWeight: "900",
+  },
+  occupancyInlineText: {
+    minWidth: 34,
+    textAlign: "right",
+    color: "rgba(247,241,232,0.92)",
+    fontSize: 10,
     fontWeight: "900",
   },
   cardActions: { flexDirection: "row", gap: 10, marginTop: 2 },
