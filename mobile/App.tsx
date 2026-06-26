@@ -460,7 +460,8 @@ function AppContent() {
   const [appTab, setAppTab] = useState<AppTab>("home");
   const [displayName, setDisplayName] = useState("Jugador Footy");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("Password123");
+  const [password, setPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = useState<UserRole>("PLAYER");
@@ -939,11 +940,20 @@ function startOfDay(date: Date) {
   }
 
   async function submitAuth() {
-    if (!email.trim() || !password.trim()) {
-      Alert.alert("Faltan datos", "Introduce email y password.");
+    const normalizedEmail = email.trim();
+    const validationError = validateAuthForm({
+      authMode,
+      displayName,
+      email: normalizedEmail,
+      password,
+    });
+
+    if (validationError) {
+      setAuthError(validationError);
       return;
     }
 
+    setAuthError(null);
     setLoading(true);
     try {
       const path =
@@ -959,10 +969,12 @@ function startOfDay(date: Date) {
 
       await applyAuthenticatedSession(auth);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Error inesperado";
+      const message = authErrorMessage(
+        error instanceof Error ? error.message : "Error inesperado",
+        authMode,
+      );
       setNotice(message);
-      Alert.alert("No se pudo entrar", message);
+      setAuthError(message);
     } finally {
       setLoading(false);
     }
@@ -1336,38 +1348,82 @@ function startOfDay(date: Date) {
               <ModeButton
                 label="Entrar"
                 active={authMode === "login"}
-                onPress={() => setAuthMode("login")}
+                onPress={() => {
+                  setAuthMode("login");
+                  setAuthError(null);
+                }}
               />
               <ModeButton
                 label="Registro"
                 active={authMode === "register"}
-                onPress={() => setAuthMode("register")}
+                onPress={() => {
+                  setAuthMode("register");
+                  setAuthError(null);
+                }}
               />
+            </View>
+            <View style={styles.authFormHeading}>
+              <Text style={styles.authFormTitle}>
+                {authMode === "login" ? "Que bueno verte" : "Crea tu cuenta"}
+              </Text>
+              <Text style={styles.authFormCopy}>
+                {authMode === "login"
+                  ? "Tu proximo partido esta a un pase."
+                  : "Empieza a jugar y organiza partidos cerca de ti."}
+              </Text>
             </View>
             {authMode === "register" ? (
               <Field
                 label="Nombre"
                 value={displayName}
-                onChangeText={setDisplayName}
+                onChangeText={(value) => {
+                  setDisplayName(value);
+                  setAuthError(null);
+                }}
                 placeholder="Tu nombre visible"
+                error={authError?.startsWith("Escribe tu nombre")}
               />
             ) : null}
             <Field
               label="Email"
               value={email}
-              onChangeText={setEmail}
-              placeholder="email@footy.local"
+              onChangeText={(value) => {
+                setEmail(value);
+                setAuthError(null);
+              }}
+              placeholder="tu@email.com"
               keyboardType="email-address"
+              autoComplete="email"
+              error={authError?.startsWith("Introduce un email")}
             />
-            <Field
+            <PasswordField
               label="Password"
               value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              secureTextEntry
+              onChangeText={(value) => {
+                setPassword(value);
+                setAuthError(null);
+              }}
+              error={
+                authError?.startsWith("La contrasena") ||
+                authError?.startsWith("Revisa tu email o contrasena")
+              }
             />
+            {authMode === "register" ? (
+              <View style={styles.passwordProtocol}>
+                <View style={styles.passwordProtocolDot} />
+                <Text style={styles.passwordProtocolText}>
+                  Minimo 8 caracteres. Usa una combinacion que solo tu conozcas.
+                </Text>
+              </View>
+            ) : null}
+            {authError ? (
+              <View style={styles.authErrorBox} accessibilityLiveRegion="polite">
+                <View style={styles.authErrorDot} />
+                <Text style={styles.authErrorText}>{authError}</Text>
+              </View>
+            ) : null}
             <Pressable
-              style={styles.authButton}
+              style={[styles.authButton, loading && styles.authButtonDisabled]}
               onPress={submitAuth}
               disabled={loading}
             >
@@ -1389,7 +1445,6 @@ function startOfDay(date: Date) {
               loading={loading}
               onGoogleToken={submitGoogleToken}
             />
-            <Text style={styles.authNotice}>{notice}</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -2504,15 +2559,13 @@ function GoogleAuthButton({
             )
           }
           disabled={loading}
+          accessibilityRole="button"
+          accessibilityLabel="Continuar con Google, aun no configurado"
         >
           <View style={styles.googleMark}>
             <Text style={styles.googleMarkText}>G</Text>
           </View>
-          <Text style={styles.googleButtonText}>Continuar con Google</Text>
         </Pressable>
-        <Text style={styles.googleHint}>
-          Google queda listo al anadir tus Client IDs.
-        </Text>
       </>
     );
   }
@@ -2567,11 +2620,12 @@ function ConfiguredGoogleAuthButton({
       ]}
       onPress={submitGoogleAuth}
       disabled={loading}
+      accessibilityRole="button"
+      accessibilityLabel="Continuar con Google"
     >
       <View style={styles.googleMark}>
         <Text style={styles.googleMarkText}>G</Text>
       </View>
-      <Text style={styles.googleButtonText}>Continuar con Google</Text>
     </Pressable>
   );
 }
@@ -4142,8 +4196,9 @@ function BottomNav({
 }
 function Field({
   label,
+  error = false,
   ...props
-}: { label: string } & ComponentProps<typeof TextInput>) {
+}: { label: string; error?: boolean } & ComponentProps<typeof TextInput>) {
   return (
     <View style={styles.fieldBlock}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -4151,10 +4206,86 @@ function Field({
         {...props}
         autoCapitalize="none"
         placeholderTextColor="#8A8F8B"
-        style={styles.input}
+        style={[styles.input, error && styles.inputError]}
       />
     </View>
   );
+}
+
+function PasswordField({
+  label,
+  error = false,
+  ...props
+}: { label: string; error?: boolean } & ComponentProps<typeof TextInput>) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.passwordInputWrap, error && styles.inputError]}>
+        <TextInput
+          {...props}
+          autoCapitalize="none"
+          autoComplete="password"
+          placeholder="Tu contrasena"
+          placeholderTextColor="#8A8F8B"
+          secureTextEntry={!visible}
+          style={styles.passwordInput}
+        />
+        <Pressable
+          style={styles.passwordVisibilityButton}
+          onPress={() => setVisible((current) => !current)}
+          accessibilityRole="button"
+          accessibilityLabel={visible ? "Ocultar contrasena" : "Mostrar contrasena"}
+        >
+          <Text style={styles.passwordVisibilityText}>{visible ? "Ocultar" : "Ver"}</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function validateAuthForm({
+  authMode,
+  displayName,
+  email,
+  password,
+}: {
+  authMode: AuthMode;
+  displayName: string;
+  email: string;
+  password: string;
+}) {
+  if (authMode === "register" && !displayName.trim()) {
+    return "Escribe tu nombre para que los demas jugadores te reconozcan.";
+  }
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    return "Introduce un email valido.";
+  }
+  if (!password) {
+    return "La contrasena es obligatoria.";
+  }
+  if (authMode === "register" && password.length < 8) {
+    return "La contrasena debe tener al menos 8 caracteres.";
+  }
+  return null;
+}
+
+function authErrorMessage(message: string, authMode: AuthMode) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("email already registered")) {
+    return "Ya existe una cuenta con este email. Entra o usa otro email.";
+  }
+  if (normalized.includes("invalid credentials")) {
+    return "Revisa tu email o contrasena e intentalo de nuevo.";
+  }
+  if (normalized.includes("must be") && normalized.includes("password")) {
+    return "La contrasena debe tener al menos 8 caracteres.";
+  }
+  if (authMode === "register" && normalized.includes("validation")) {
+    return "Revisa tus datos antes de crear la cuenta.";
+  }
+  return "No hemos podido completar la solicitud. Intentalo de nuevo.";
 }
 
 function CalendarPicker({
@@ -4907,10 +5038,12 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 460,
     alignSelf: "center",
-    backgroundColor: "#E3DBD0",
-    borderRadius: 18,
-    padding: Platform.OS === "android" ? 12 : 14,
-    gap: Platform.OS === "android" ? 12 : 14,
+    backgroundColor: "rgba(18,31,24,0.94)",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.18)",
+    padding: Platform.OS === "android" ? 16 : 20,
+    gap: Platform.OS === "android" ? 14 : 16,
     overflow: "hidden",
     shadowColor: "#000000",
     shadowOpacity: 0.28,
@@ -4924,7 +5057,7 @@ const styles = StyleSheet.create({
     borderRadius: 60,
     right: -58,
     top: -62,
-    backgroundColor: "rgba(179,243,81,0.22)",
+    backgroundColor: "rgba(179,243,81,0.13)",
   },
   authCardBubbleTwo: {
     position: "absolute",
@@ -4933,15 +5066,20 @@ const styles = StyleSheet.create({
     borderRadius: 43,
     left: -44,
     bottom: -38,
-    backgroundColor: "rgba(10,17,14,0.05)",
+    backgroundColor: "rgba(227,219,208,0.05)",
   },
   modeSwitchLight: {
     height: 54,
     borderRadius: 27,
-    backgroundColor: "rgba(156,163,175,0.18)",
+    backgroundColor: "rgba(247,241,232,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.08)",
     flexDirection: "row",
     padding: 6,
   },
+  authFormHeading: { gap: 3, paddingTop: 2 },
+  authFormTitle: { color: "#F7F1E8", fontSize: 22, fontWeight: "900" },
+  authFormCopy: { color: "rgba(227,219,208,0.66)", fontSize: 13, lineHeight: 18 },
   modeSwitchDark: {
     flex: 1,
     height: 42,
@@ -5023,6 +5161,46 @@ const styles = StyleSheet.create({
     color: "#F7F1E8",
     fontSize: 14,
   },
+  inputError: {
+    borderColor: "rgba(255,128,128,0.88)",
+    backgroundColor: "rgba(146,39,39,0.15)",
+  },
+  passwordInputWrap: {
+    minHeight: 46,
+    borderRadius: 14,
+    paddingLeft: 14,
+    paddingRight: 7,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: { flex: 1, color: "#F7F1E8", fontSize: 14, minHeight: 46 },
+  passwordVisibilityButton: {
+    minWidth: 54,
+    minHeight: 34,
+    borderRadius: 17,
+    backgroundColor: "rgba(143,234,106,0.13)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  passwordVisibilityText: { color: "#A7F47D", fontSize: 11, fontWeight: "900" },
+  passwordProtocol: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: -5 },
+  passwordProtocolDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#8FEA6A", marginTop: 5 },
+  passwordProtocolText: { flex: 1, color: "rgba(227,219,208,0.62)", fontSize: 11, lineHeight: 16 },
+  authErrorBox: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "flex-start",
+    padding: 11,
+    borderRadius: 14,
+    backgroundColor: "rgba(146,39,39,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(255,128,128,0.34)",
+  },
+  authErrorDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#FF8C8C", marginTop: 4 },
+  authErrorText: { flex: 1, color: "#FFD1D1", fontSize: 12, lineHeight: 17, fontWeight: "700" },
   authButton: {
     minHeight: 54,
     borderRadius: 27,
@@ -5030,8 +5208,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  authButtonDisabled: { opacity: 0.72 },
   authButtonText: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
-  authNotice: { color: "#4A4A4A", fontSize: 13 },
   authDividerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -5040,43 +5218,30 @@ const styles = StyleSheet.create({
   authDividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: "rgba(10,17,14,0.12)",
+    backgroundColor: "rgba(247,241,232,0.12)",
   },
   authDividerText: {
-    color: "rgba(10,17,14,0.54)",
+    color: "rgba(227,219,208,0.54)",
     fontSize: 12,
     fontWeight: "900",
   },
   googleButton: {
-    minHeight: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    alignSelf: "center",
+    borderRadius: 24,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "rgba(10,17,14,0.12)",
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
   },
   googleButtonDisabled: { opacity: 0.62 },
   googleMark: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(10,17,14,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
   googleMarkText: { color: "#4285F4", fontSize: 17, fontWeight: "900" },
-  googleButtonText: { color: "#0A110E", fontSize: 15, fontWeight: "900" },
-  googleHint: {
-    color: "rgba(10,17,14,0.55)",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
-  },
   homeShell: {
     flex: 1,
     backgroundColor: "#000000",
