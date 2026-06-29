@@ -15,7 +15,6 @@ export type MapLocation = { latitude: number; longitude: number };
 export type MapPoint = { x: number; y: number };
 export type MapTile = { key: string; x: number; y: number; uri: string };
 export type GeocodeResult = { lat: string; lon: string; display_name: string };
-export type NotificationsModule = typeof import("expo-notifications");
 
 export type AuthResponse = {
   accessToken: string;

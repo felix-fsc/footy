@@ -1,10 +1,6 @@
-import * as SecureStore from "expo-secure-store";
 import * as Location from "expo-location";
-import * as Google from "expo-auth-session/providers/google";
 import * as WebBrowser from "expo-web-browser";
-import { useEventListener } from "expo";
 import { StatusBar } from "expo-status-bar";
-import { VideoView, useVideoPlayer } from "expo-video";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
@@ -29,7 +25,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ApiRequestError } from "./src/api/errors";
+import { fetchMatchesSnapshot } from "./src/api/matches";
+import { useApiRequest } from "./src/api/useApiRequest";
+import { hasGoogleClientId } from "./src/api/config";
+import { GoogleAuthButton } from "./src/components/auth/GoogleAuthButton";
+import { AppLogoImage, LogoMark } from "./src/components/branding/Branding";
 import {
   EditProfileIcon,
   LocationTargetIcon,
@@ -43,6 +43,7 @@ import {
   TimeWheel,
 } from "./src/components/editor/MatchEditorControls";
 import { HomeMetric, ListStat, QuickMessageButton } from "./src/components/home/HomeWidgets";
+import { IntroVideoOverlay } from "./src/components/intro/IntroVideoOverlay";
 import { CompactMatch } from "./src/components/matches/CompactMatch";
 import { MatchImageBackground, OccupancyBar } from "./src/components/matches/MatchMedia";
 import { TeamOccupancy, TeamRoster } from "./src/components/matches/TeamRoster";
@@ -57,6 +58,8 @@ import {
   StatusBadge,
 } from "./src/components/ui/FormControls";
 import { ModeButton } from "./src/components/ui/ModeButton";
+import { requestAppPermissions } from "./src/platform/permissions";
+import { sessionStorageAdapter } from "./src/platform/sessionStorage";
 import type {
   AppTab,
   AuthMode,
@@ -71,7 +74,6 @@ import type {
   MatchFilter,
   MatchResponse,
   MessageResponse,
-  NotificationsModule,
   PlayerPosition,
   PlayerProfileResponse,
   SavedFieldResponse,
@@ -100,167 +102,7 @@ import {
   userParticipatesInMatch,
 } from "./src/utils/matchUtils";
 
-const DEPLOYED_API_BASE_URL = "https://footy-backend-576b.onrender.com";
-
-const SESSION_STORAGE_KEY = "footy.session.v1";
-const INTRO_VIDEO = require("./assets/intro.mp4");
 const MOBILE_EDGE_PADDING = 10;
-
-declare const process: {
-  env: {
-    EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?: string;
-    EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?: string;
-    EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?: string;
-    EXPO_PUBLIC_API_BASE_URL?: string;
-  };
-};
-
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || DEPLOYED_API_BASE_URL;
-const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-const GOOGLE_ANDROID_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
-const GOOGLE_IOS_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-
-type BrowserStorage = {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-  removeItem(key: string): void;
-};
-
-function getBrowserStorage() {
-  return (globalThis as { localStorage?: BrowserStorage }).localStorage;
-}
-
-const sessionStorageAdapter = {
-  async get() {
-    try {
-      if (Platform.OS !== "web") {
-        return await SecureStore.getItemAsync(SESSION_STORAGE_KEY);
-      }
-      return getBrowserStorage()?.getItem(SESSION_STORAGE_KEY) ?? null;
-    } catch {
-      return null;
-    }
-  },
-  async set(session: StoredSession) {
-    const value = JSON.stringify(session);
-    try {
-      if (Platform.OS !== "web") {
-        await SecureStore.setItemAsync(SESSION_STORAGE_KEY, value);
-        return;
-      }
-      getBrowserStorage()?.setItem(SESSION_STORAGE_KEY, value);
-    } catch {
-      // Ignore unavailable storage.
-    }
-  },
-  async clear() {
-    try {
-      if (Platform.OS !== "web") {
-        await SecureStore.deleteItemAsync(SESSION_STORAGE_KEY);
-        return;
-      }
-      getBrowserStorage()?.removeItem(SESSION_STORAGE_KEY);
-    } catch {
-      // Ignore unavailable storage.
-    }
-  },
-};
-
-async function requestAppPermissions() {
-  if (Platform.OS === "web") {
-    return;
-  }
-
-  try {
-    const locationPermission = await Location.getForegroundPermissionsAsync();
-    if (!locationPermission.granted && locationPermission.canAskAgain) {
-      await Location.requestForegroundPermissionsAsync();
-    }
-  } catch {
-    // Permission prompts can fail on unsupported builds; app usage continues.
-  }
-
-  try {
-    const Notifications = (
-      eval("require") as (moduleName: string) => NotificationsModule
-    )("expo-notifications");
-
-    if (Platform.OS === "android") {
-      await Notifications.setNotificationChannelAsync("default", {
-        name: "Footy",
-        importance: Notifications.AndroidImportance.DEFAULT,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: "#8FEA6A",
-      });
-    }
-
-    const notificationPermission = await Notifications.getPermissionsAsync();
-    if (!notificationPermission.granted && notificationPermission.canAskAgain) {
-      await Notifications.requestPermissionsAsync();
-    }
-  } catch {
-    // Expo Go and some simulators do not support the full notifications stack.
-  }
-}
-
-function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
-  const finished = useRef(false);
-  const player = useVideoPlayer(INTRO_VIDEO, (nextPlayer) => {
-    nextPlayer.loop = false;
-    nextPlayer.muted = true;
-    nextPlayer.play();
-  });
-
-  const finish = useCallback(() => {
-    if (finished.current) {
-      return;
-    }
-    finished.current = true;
-    onDone();
-  }, [onDone]);
-
-  useEventListener(player, "playToEnd", finish);
-  useEventListener(player, "statusChange", ({ status }) => {
-    if (status === "error") {
-      finish();
-    }
-    if (Platform.OS === "web" && status === "readyToPlay") {
-      player.play();
-    }
-  });
-
-  useEffect(() => {
-    if (Platform.OS !== "web") {
-      return;
-    }
-
-    const playTimer = setTimeout(() => player.play(), 0);
-    return () => clearTimeout(playTimer);
-  }, [player]);
-
-  useEffect(() => {
-    const fallback = setTimeout(finish, 6500);
-    return () => clearTimeout(fallback);
-  }, [finish]);
-
-  return (
-    <View style={styles.introScreen}>
-      <StatusBar style="light" />
-      <VideoView
-        player={player}
-        nativeControls={false}
-        contentFit="cover"
-        playsInline
-        style={styles.introVideo}
-      />
-      <Pressable style={styles.introSkipButton} onPress={finish}>
-        <Text style={styles.introSkipText}>Saltar</Text>
-      </Pressable>
-    </View>
-  );
-}
 
 const markerPositions = [
   { left: 20, top: 33 },
@@ -330,12 +172,7 @@ function AppContent() {
   const [profilePosition, setProfilePosition] =
     useState<PlayerPosition>("MIDFIELDER");
   const [profileEditing, setProfileEditing] = useState(false);
-  const googleLoginConfigured =
-    Platform.OS === "web"
-      ? Boolean(GOOGLE_WEB_CLIENT_ID)
-      : Platform.OS === "android"
-        ? Boolean(GOOGLE_ANDROID_CLIENT_ID)
-        : Boolean(GOOGLE_IOS_CLIENT_ID);
+  const googleLoginConfigured = hasGoogleClientId(Platform.OS);
 
   const [newTitle, setNewTitle] = useState("Partido Footy");
   const [newFieldName, setNewFieldName] = useState("Campo Municipal Saladillo");
@@ -415,49 +252,19 @@ function AppContent() {
   const selectedIsOpen = selectedMatch?.status === "OPEN";
   const nextMyMatch = myMatches[0] ?? null;
   const victoryStreak = Math.max(3, Math.min(9, myMatches.length + 3));
-  const authHeaders = useMemo(
-    () => ({
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    }),
-    [token],
-  );
+  const handleUnauthorized = useCallback(() => {
+    void sessionStorageAdapter.clear();
+    setToken(null);
+    setUserName(null);
+    setCurrentUserRole("PLAYER");
+    setCurrentUserId(null);
+    setMyMatches([]);
+    setMessages([]);
+    setProfile(null);
+    setNotice("Sesion caducada, vuelve a entrar");
+  }, []);
 
-  const request = useCallback(
-    async <T,>(path: string, options: RequestInit = {}) => {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        headers: {
-          ...authHeaders,
-          ...(options.headers ?? {}),
-        },
-      });
-
-      if (!response.ok) {
-        if (response.status === 401 && token) {
-          void sessionStorageAdapter.clear();
-          setToken(null);
-          setUserName(null);
-          setCurrentUserRole("PLAYER");
-          setCurrentUserId(null);
-          setMyMatches([]);
-          setMessages([]);
-          setProfile(null);
-          setNotice("Sesion caducada, vuelve a entrar");
-          throw new Error("Sesion caducada, vuelve a entrar");
-        }
-
-        const errorText = await response.text();
-        throw new ApiRequestError(response.status, errorText);
-      }
-      if (response.status === 204) {
-        return undefined as T;
-      }
-
-      return (await response.json()) as T;
-    },
-    [authHeaders, token],
-  );
+  const request = useApiRequest({ token, onUnauthorized: handleUnauthorized });
 
   const loadMatches = useCallback(async () => {
     const [available, mine] = await Promise.all([
@@ -722,18 +529,7 @@ function AppContent() {
       setAppTab("home");
       setHomeMode("map");
 
-      const nextHeaders = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${auth.accessToken}`,
-      };
-      const [available, mine] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/matches`).then(
-          (response) => response.json() as Promise<MatchResponse[]>,
-        ),
-        fetch(`${API_BASE_URL}/api/matches/me`, { headers: nextHeaders }).then(
-          (response) => response.json() as Promise<MatchResponse[]>,
-        ),
-      ]);
+      const { available, mine } = await fetchMatchesSnapshot(auth.accessToken);
       setMatches(available);
       setMyMatches(mine);
       setSelectedMatchId(null);
@@ -2523,141 +2319,6 @@ function ScreenBubbles() {
     </View>
   );
 }
-function AppLogoImage({ size = 42 }: { size?: number }) {
-  return (
-    <Image
-      source={require("./assets/icon.png")}
-      style={{ width: size, height: size, borderRadius: Math.round(size * 0.22) }}
-    />
-  );
-}
-
-function GoogleAuthButton({
-  configured,
-  loading,
-  onGoogleToken,
-}: {
-  configured: boolean;
-  loading: boolean;
-  onGoogleToken: (idToken: string) => Promise<void>;
-}) {
-  if (!configured) {
-    return (
-      <>
-        <Pressable
-          style={[styles.googleButton, styles.googleButtonDisabled]}
-          onPress={() =>
-            Alert.alert(
-              "Google no esta configurado",
-              "Falta configurar EXPO_PUBLIC_GOOGLE_*_CLIENT_ID en mobile y APP_SECURITY_GOOGLE_CLIENT_IDS en backend.",
-            )
-          }
-          disabled={loading}
-          accessibilityRole="button"
-          accessibilityLabel="Continuar con Google, aun no configurado"
-        >
-          <View style={styles.googleMark}>
-            <Text style={styles.googleMarkText}>G</Text>
-          </View>
-        </Pressable>
-      </>
-    );
-  }
-
-  return (
-    <ConfiguredGoogleAuthButton
-      loading={loading}
-      onGoogleToken={onGoogleToken}
-    />
-  );
-}
-
-function ConfiguredGoogleAuthButton({
-  loading,
-  onGoogleToken,
-}: {
-  loading: boolean;
-  onGoogleToken: (idToken: string) => Promise<void>;
-}) {
-  const [googleRequest, , promptGoogleSignIn] = Google.useIdTokenAuthRequest({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    androidClientId: GOOGLE_ANDROID_CLIENT_ID,
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-    selectAccount: true,
-  });
-
-  async function submitGoogleAuth() {
-    if (!googleRequest) {
-      Alert.alert("Google no esta listo", "Espera un momento e intentalo de nuevo.");
-      return;
-    }
-
-    const result = await promptGoogleSignIn();
-    if (result.type !== "success") {
-      return;
-    }
-
-    const idToken = result.params.id_token;
-    if (!idToken) {
-      Alert.alert("Google no esta listo", "Google no devolvio id_token.");
-      return;
-    }
-
-    await onGoogleToken(idToken);
-  }
-
-  return (
-    <Pressable
-      style={[
-        styles.googleButton,
-        (!googleRequest || loading) && styles.googleButtonDisabled,
-      ]}
-      onPress={submitGoogleAuth}
-      disabled={loading}
-      accessibilityRole="button"
-      accessibilityLabel="Continuar con Google"
-    >
-      <View style={styles.googleMark}>
-        <Text style={styles.googleMarkText}>G</Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function LogoMark({ size = 42 }: { size?: number }) {
-  return (
-    <View
-      style={[
-        styles.logoMark,
-        { width: size, height: size, borderRadius: Math.round(size * 0.22) },
-      ]}
-    >
-      <View
-        style={[
-          styles.logoDot,
-          {
-            width: size * 0.18,
-            height: size * 0.18,
-            borderRadius: size * 0.09,
-            left: size * 0.29,
-            top: size * 0.17,
-          },
-        ]}
-      />
-      <View
-        style={[
-          styles.logoSlash,
-          {
-            width: size * 0.5,
-            height: size * 0.2,
-            left: size * 0.28,
-            top: size * 0.5,
-          },
-        ]}
-      />
-    </View>
-  );
-}
 function TopStatus() {
   return <View style={styles.statusBarMock}></View>;
 }
@@ -3932,46 +3593,6 @@ function MapLines() {
 }
 
 const styles = StyleSheet.create({
-  introScreen: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
-  introVideo: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
-  introSkipButton: {
-    position: "absolute",
-    right: 18,
-    top: Platform.OS === "android" ? 34 : 54,
-    minHeight: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.58)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    paddingHorizontal: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  introSkipText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  logoMark: {
-    backgroundColor: "#8FEA6A",
-    overflow: "hidden",
-    position: "relative",
-  },
-  logoDot: {
-    position: "absolute",
-    backgroundColor: "#0B2915",
-  },
-  logoSlash: {
-    position: "absolute",
-    backgroundColor: "#0B2915",
-    transform: [{ rotate: "-18deg" }],
-  },
   authHeroBlock: {
     width: "100%",
     maxWidth: 460,
@@ -4170,23 +3791,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "900",
   },
-  googleButton: {
-    width: 44,
-    height: 44,
-    alignSelf: "center",
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "rgba(10,17,14,0.12)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  googleButtonDisabled: { opacity: 0.62 },
-  googleMark: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  googleMarkText: { color: "#4285F4", fontSize: 17, fontWeight: "900" },
   homeShell: {
     flex: 1,
     backgroundColor: "#000000",
