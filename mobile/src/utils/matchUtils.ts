@@ -1,5 +1,6 @@
 import type {
   DateFilter,
+  MatchFilter,
   MatchResponse,
   PlayerPosition,
   TeamSide,
@@ -148,6 +149,56 @@ export function filterMatchByDate(
   }
 
   return true;
+}
+
+export function getVisibleMatches({
+  matches,
+  myMatches,
+  searchQuery,
+  matchFilter,
+  dateFilter,
+  onlyAvailable,
+  now = new Date(),
+}: {
+  matches: MatchResponse[];
+  myMatches: MatchResponse[];
+  searchQuery: string;
+  matchFilter: MatchFilter;
+  dateFilter: DateFilter;
+  onlyAvailable: boolean;
+  now?: Date;
+}) {
+  const query = searchQuery.trim().toLowerCase();
+
+  return matches.filter((match) => {
+    const field = match.field;
+    const matchDate = new Date(match.startsAt);
+    const isFutureOrNow =
+      Number.isFinite(matchDate.getTime()) && matchDate >= now;
+
+    if (!isFutureOrNow) {
+      return false;
+    }
+
+    const matchesText =
+      !query ||
+      [match.title, field?.name, field?.city, field?.address]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query));
+
+    const matchesMine =
+      matchFilter === "all" ||
+      myMatches.some((myMatch) => myMatch.id === match.id);
+
+    const matchesDate = filterMatchByDate(match, dateFilter, now);
+
+    const matchesAvailability =
+      !onlyAvailable ||
+      (match.status === "OPEN" &&
+        match.occupancy.totalPlayers < match.occupancy.totalCapacity);
+
+    return matchesText && matchesMine && matchesDate && matchesAvailability;
+  });
 }
 
 export function isMatchOpen(match: MatchResponse) {
