@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import com.footy.backend.domain.field.Field;
 import com.footy.backend.domain.field.FieldRepository;
+import com.footy.backend.domain.message.MessageRepository;
 import com.footy.backend.domain.match.Match;
 import com.footy.backend.domain.match.MatchParticipation;
 import com.footy.backend.domain.match.MatchParticipationRepository;
@@ -22,6 +23,7 @@ import com.footy.backend.domain.match.ParticipationStatus;
 import com.footy.backend.domain.match.TeamSide;
 import com.footy.backend.domain.user.User;
 import com.footy.backend.domain.user.UserRepository;
+import com.footy.backend.domain.user.UserRole;
 
 @Service
 public class MatchService {
@@ -30,16 +32,19 @@ public class MatchService {
     private final MatchParticipationRepository participationRepository;
     private final FieldRepository fieldRepository;
     private final UserRepository userRepository;
+    private final MessageRepository messageRepository;
 
     public MatchService(
             MatchRepository matchRepository,
             MatchParticipationRepository participationRepository,
             FieldRepository fieldRepository,
-            UserRepository userRepository) {
+            UserRepository userRepository,
+            MessageRepository messageRepository) {
         this.matchRepository = matchRepository;
         this.participationRepository = participationRepository;
         this.fieldRepository = fieldRepository;
         this.userRepository = userRepository;
+        this.messageRepository = messageRepository;
     }
 
     @Transactional(readOnly = true)
@@ -82,6 +87,24 @@ public class MatchService {
         return toResponseWithOccupancy(matchRepository.save(match));
     }
 
+    @Transactional
+    public MatchResponse updateMatch(UUID currentUserId, UUID matchId, CreateMatchRequest request) {
+        User user = getUserOrUnauthorized(currentUserId);
+        Match match = getMatchOrNotFound(matchId);
+        requireOwnerOrAdmin(user, match);
+
+        Field field = resolveField(request);
+        match.updateDetails(
+                request.title().trim(),
+                field,
+                request.startsAt(),
+                request.maxPlayersPerTeam(),
+                request.pricePerPersonCents(),
+                blankToNull(request.coverImageUrl()));
+        updateOpenOrFullStatus(match);
+        return toResponseWithOccupancy(match);
+    }
+
     @Transactional(readOnly = true)
     public MatchResponse getMatch(UUID id) {
         Match match = getMatchOrNotFound(id);
@@ -114,9 +137,10 @@ public class MatchService {
 
     @Transactional
     public MatchResponse cancelMatch(UUID currentUserId, UUID matchId) {
+        User user = getUserOrUnauthorized(currentUserId);
         Match match = getMatchOrNotFound(matchId);
 
-        if (!match.getCreatedBy().getId().equals(currentUserId)) {
+        if (!isOwnerOrAdmin(user, match)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the match creator can cancel this match");
         }
 
@@ -127,6 +151,33 @@ public class MatchService {
         match.cancel();
         return toResponseWithOccupancy(match);
     }
+
+    @Transactional
+    public void deleteMatch(UUID currentUserId, UUID matchId) {
+        User user = getUserOrUnauthorized(currentUserId);
+        requireAdmin(user);
+        Match match = getMatchOrNotFound(matchId);
+
+        messageRepository.deleteAllByMatchId(matchId);
+        participationRepository.deleteAll(participationRepository.findAllByMatchId(matchId));
+        matchRepository.delete(match);
+    }
+
+    @Transactional
+    public MatchResponse removePlayerFromMatch(UUID currentUserId, UUID matchId, UUID userId) {
+        User user = getUserOrUnauthorized(currentUserId);
+        requireAdmin(user);
+        MatchParticipation participation = participationRepository.findByMatchIdAndUserIdAndStatus(
+                        matchId,
+                        userId,
+                        ParticipationStatus.ACTIVE)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Active participation not found"));
+
+        participation.leave();
+        updateOpenOrFullStatus(participation.getMatch());
+        return toResponseWithOccupancy(participation.getMatch());
+    }
+
     @Transactional
     public void leaveMatch(UUID currentUserId, UUID matchId) {
         MatchParticipation participation = participationRepository.findByMatchIdAndUserId(matchId, currentUserId)
@@ -180,6 +231,22 @@ public class MatchService {
     private User getUserOrUnauthorized(UUID userId) {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authenticated user not found"));
+    }
+
+    private boolean isOwnerOrAdmin(User user, Match match) {
+        return user.getRole() == UserRole.ADMIN || match.getCreatedBy().getId().equals(user.getId());
+    }
+
+    private void requireOwnerOrAdmin(User user, Match match) {
+        if (!isOwnerOrAdmin(user, match)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only the match creator or an admin can edit this match");
+        }
+    }
+
+    private void requireAdmin(User user) {
+        if (user.getRole() != UserRole.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Admin role required");
+        }
     }
 
     private Match getMatchOrNotFound(UUID id) {

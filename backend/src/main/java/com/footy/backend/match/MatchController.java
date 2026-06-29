@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -44,6 +45,14 @@ public class MatchController {
         return matchService.createMatch(UUID.fromString(jwt.getSubject()), request);
     }
 
+    @PutMapping("/{id}")
+    MatchResponse updateMatch(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID id,
+            @Valid @RequestBody CreateMatchRequest request) {
+        return matchService.updateMatch(UUID.fromString(jwt.getSubject()), id, request);
+    }
+
     @GetMapping("/{id}")
     MatchResponse getMatch(@PathVariable UUID id) {
         return matchService.getMatch(id);
@@ -66,5 +75,19 @@ public class MatchController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     void leaveMatch(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
         matchService.leaveMatch(UUID.fromString(jwt.getSubject()), id);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteMatch(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
+        matchService.deleteMatch(UUID.fromString(jwt.getSubject()), id);
+    }
+
+    @DeleteMapping("/{id}/players/{userId}")
+    MatchResponse removePlayer(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID id,
+            @PathVariable UUID userId) {
+        return matchService.removePlayerFromMatch(UUID.fromString(jwt.getSubject()), id, userId);
     }
 }

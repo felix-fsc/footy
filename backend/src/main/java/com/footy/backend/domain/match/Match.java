@@ -67,6 +67,15 @@ public class Match extends AuditableEntity {
         this.createdBy = createdBy;
     }
 
+    public void updateDetails(String title, Field field, Instant startsAt, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl) {
+        this.title = title;
+        this.field = field;
+        this.startsAt = startsAt;
+        this.maxPlayersPerTeam = maxPlayersPerTeam;
+        this.pricePerPersonCents = pricePerPersonCents;
+        this.coverImageUrl = coverImageUrl;
+    }
+
     public UUID getId() {
         return id;
     }

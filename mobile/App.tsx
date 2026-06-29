@@ -67,6 +67,18 @@ type AuthResponse = {
   };
 };
 
+class ApiRequestError extends Error {
+  status: number;
+  body: string;
+
+  constructor(status: number, body: string) {
+    super(readApiErrorText(body) || `HTTP ${status}`);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
 type StoredSession = {
   accessToken: string;
   expiresAt?: string;
@@ -162,7 +174,8 @@ type PlayerProfileResponse = {
   city: string | null;
 };
 
-const API_BASE_URL = "https://footy-backend-576b.onrender.com";
+const DEPLOYED_API_BASE_URL = "https://footy-backend-576b.onrender.com";
+const LOCAL_WEB_API_BASE_URL = "http://localhost:8080";
 
 const SESSION_STORAGE_KEY = "footy.session.v1";
 const INTRO_VIDEO = require("./assets/intro.mp4");
@@ -185,15 +198,20 @@ const MATCH_COVER_IMAGES = [
   "https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=1000&q=72",
 ];
 const DEFAULT_MATCH_COVER = MATCH_COVER_IMAGES[0];
+const MOBILE_EDGE_PADDING = 10;
 
 declare const process: {
   env: {
     EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?: string;
     EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID?: string;
     EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?: string;
+    EXPO_PUBLIC_API_BASE_URL?: string;
   };
 };
 
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_BASE_URL ||
+  (Platform.OS === "web" ? LOCAL_WEB_API_BASE_URL : DEPLOYED_API_BASE_URL);
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_ANDROID_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -303,7 +321,19 @@ function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
     if (status === "error") {
       finish();
     }
+    if (Platform.OS === "web" && status === "readyToPlay") {
+      player.play();
+    }
   });
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      return;
+    }
+
+    const playTimer = setTimeout(() => player.play(), 0);
+    return () => clearTimeout(playTimer);
+  }, [player]);
 
   useEffect(() => {
     const fallback = setTimeout(finish, 6500);
@@ -317,6 +347,7 @@ function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
         player={player}
         nativeControls={false}
         contentFit="cover"
+        playsInline
         style={styles.introVideo}
       />
       <Pressable style={styles.introSkipButton} onPress={finish}>
@@ -390,6 +421,27 @@ function formatDraftPrice(value: string) {
   return `${price.toFixed(2)} EUR`;
 }
 
+function dateInputFromInstant(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return tomorrowDateParts();
+  }
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function timeInputFromInstant(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return "19:00";
+  }
+  return `${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes(),
+  ).padStart(2, "0")}`;
+}
+
 function getRandomMatchCover() {
   const index = Math.floor(Math.random() * MATCH_COVER_IMAGES.length);
   return MATCH_COVER_IMAGES[index] ?? DEFAULT_MATCH_COVER;
@@ -458,7 +510,7 @@ function AppContent() {
   const [homeMode, setHomeMode] = useState<HomeMode>("map");
   const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
   const [appTab, setAppTab] = useState<AppTab>("home");
-  const [displayName, setDisplayName] = useState("Jugador Footy");
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
@@ -510,6 +562,7 @@ function AppContent() {
   const [newLongitude, setNewLongitude] = useState(-6.94472);
   const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [showCreateCalendar, setShowCreateCalendar] = useState(false);
+  const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [adminFieldEditingId, setAdminFieldEditingId] = useState<string | null>(null);
   const [adminFieldName, setAdminFieldName] = useState("");
   const [adminFieldAddress, setAdminFieldAddress] = useState("");
@@ -653,7 +706,7 @@ function startOfDay(date: Date) {
         }
 
         const errorText = await response.text();
-        throw new Error(errorText || `HTTP ${response.status}`);
+        throw new ApiRequestError(response.status, errorText);
       }
       if (response.status === 204) {
         return undefined as T;
@@ -939,6 +992,18 @@ function startOfDay(date: Date) {
       setSelectedMatchId(null);
   }
 
+  function switchAuthMode(nextMode: AuthMode) {
+    if (nextMode === authMode) {
+      return;
+    }
+
+    setAuthMode(nextMode);
+    setEmail("");
+    setPassword("");
+    setDisplayName("");
+    setAuthError(null);
+  }
+
   async function submitAuth() {
     const normalizedEmail = email.trim();
     const validationError = validateAuthForm({
@@ -960,8 +1025,12 @@ function startOfDay(date: Date) {
         authMode === "login" ? "/api/auth/login" : "/api/auth/register";
       const body =
         authMode === "login"
-          ? { email, password }
-          : { email, password, displayName };
+          ? { email: normalizedEmail, password }
+          : {
+              email: normalizedEmail,
+              password,
+              displayName: displayName.trim(),
+            };
       const auth = await request<AuthResponse>(path, {
         method: "POST",
         body: JSON.stringify(body),
@@ -969,10 +1038,7 @@ function startOfDay(date: Date) {
 
       await applyAuthenticatedSession(auth);
     } catch (error) {
-      const message = authErrorMessage(
-        error instanceof Error ? error.message : "Error inesperado",
-        authMode,
-      );
+      const message = authErrorMessage(error, authMode);
       setNotice(message);
       setAuthError(message);
     } finally {
@@ -1133,35 +1199,82 @@ function startOfDay(date: Date) {
 
     setLoading(true);
     try {
-      const created = await request<MatchResponse>("/api/matches", {
-        method: "POST",
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          startsAt: new Date(`${newDate}T${newTime}:00`).toISOString(),
-          maxPlayersPerTeam: draft.maxPlayers,
-          pricePerPersonCents: draft.pricePerPersonCents,
-          coverImageUrl: getRandomMatchCover(),
-          fieldId: selectedSavedFieldId,
-          field: selectedSavedFieldId
-            ? null
-            : {
-                name: newFieldName.trim(),
-                address: newAddress.trim() || null,
-                city: newCity.trim() || null,
-                latitude: newLatitude,
-                longitude: newLongitude,
-              },
-        }),
-      });
+      const matchBody = {
+        title: newTitle.trim(),
+        startsAt: new Date(`${newDate}T${newTime}:00`).toISOString(),
+        maxPlayersPerTeam: draft.maxPlayers,
+        pricePerPersonCents: draft.pricePerPersonCents,
+        coverImageUrl:
+          (editingMatchId && selectedMatch?.coverImageUrl) || getRandomMatchCover(),
+        fieldId: selectedSavedFieldId,
+        field: selectedSavedFieldId
+          ? null
+          : {
+              name: newFieldName.trim(),
+              address: newAddress.trim() || null,
+              city: newCity.trim() || null,
+              latitude: newLatitude,
+              longitude: newLongitude,
+            },
+      };
+      const saved = await request<MatchResponse>(
+        editingMatchId ? `/api/matches/${editingMatchId}` : "/api/matches",
+        {
+          method: editingMatchId ? "PUT" : "POST",
+          body: JSON.stringify(matchBody),
+        },
+      );
       await loadMatches();
-      setSelectedMatchId(created.id);
-      setNotice("Partido creado");
+      setSelectedMatchId(saved.id);
+      setNotice(editingMatchId ? "Partido actualizado" : "Partido creado");
+      setEditingMatchId(null);
       setShowCreatePreview(false);
       setAppTab("detail");
     } catch (error) {
       Alert.alert(
-        "No se pudo crear",
-        error instanceof Error ? error.message : "Error inesperado",
+        editingMatchId ? "No se pudo editar" : "No se pudo crear",
+        matchMutationErrorMessage(error),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteMatch(matchId: string) {
+    setLoading(true);
+    try {
+      await request(`/api/matches/${matchId}`, {
+        method: "DELETE",
+      });
+      await loadMatches();
+      setSelectedMatchId(null);
+      setMessages([]);
+      setNotice("Partido borrado");
+      setAppTab("home");
+    } catch (error) {
+      Alert.alert(
+        "No se pudo borrar",
+        matchMutationErrorMessage(error),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function removeMatchPlayer(matchId: string, userId: string) {
+    setLoading(true);
+    try {
+      const updated = await request<MatchResponse>(
+        `/api/matches/${matchId}/players/${userId}`,
+        { method: "DELETE" },
+      );
+      await loadMatches();
+      setSelectedMatchId(updated.id);
+      setNotice("Jugador eliminado del partido");
+    } catch (error) {
+      Alert.alert(
+        "No se pudo quitar",
+        matchMutationErrorMessage(error),
       );
     } finally {
       setLoading(false);
@@ -1289,6 +1402,46 @@ function startOfDay(date: Date) {
     setAppTab("home");
   }
 
+  function resetMatchDraft() {
+    setEditingMatchId(null);
+    setNewTitle("Partido Footy");
+    setNewFieldName("Campo Municipal Saladillo");
+    setNewAddress("Calle Hermanos Alvarez Quintero 13");
+    setNewCity("Huelva");
+    setNewDate(tomorrowDateParts());
+    setNewTime("19:00");
+    setNewMaxPlayers("5");
+    setNewPricePerPerson("3.50");
+    setNewLatitude(37.26142);
+    setNewLongitude(-6.94472);
+    setSelectedSavedFieldId(null);
+    setShowCreatePreview(false);
+    setShowCreateCalendar(false);
+  }
+
+  function startMatchCreate() {
+    resetMatchDraft();
+    setAppTab("create");
+  }
+
+  function startMatchEdit(match: MatchResponse) {
+    setEditingMatchId(match.id);
+    setNewTitle(match.title);
+    setNewFieldName(match.field?.name ?? "Campo por confirmar");
+    setNewAddress(match.field?.address ?? "");
+    setNewCity(match.field?.city ?? "");
+    setNewDate(dateInputFromInstant(match.startsAt));
+    setNewTime(timeInputFromInstant(match.startsAt));
+    setNewMaxPlayers(String(match.maxPlayersPerTeam));
+    setNewPricePerPerson((match.pricePerPersonCents / 100).toFixed(2));
+    setNewLatitude(match.field?.latitude ?? DEFAULT_MAP_CENTER.latitude);
+    setNewLongitude(match.field?.longitude ?? DEFAULT_MAP_CENTER.longitude);
+    setSelectedSavedFieldId(null);
+    setShowCreatePreview(false);
+    setShowCreateCalendar(false);
+    setAppTab("create");
+  }
+
   function logout() {
     void sessionStorageAdapter.clear();
     setToken(null);
@@ -1332,13 +1485,9 @@ function startOfDay(date: Date) {
             <View style={styles.authLogoHalo}>
               <View style={styles.authLogoBubbleOne} />
               <View style={styles.authLogoBubbleTwo} />
-              <AppLogoImage size={Platform.OS === "android" ? 76 : 88} />
+              <AppLogoImage size={Platform.OS === "android" ? 58 : 64} />
             </View>
             <Text style={styles.authBrand}>Footy</Text>
-            <Text style={styles.authKicker}>Partidos cerca de ti</Text>
-            <Text style={styles.authCopy}>
-              Entra, encuentra equipo y organiza tus partidos en segundos.
-            </Text>
           </View>
 
           <View style={styles.authCard}>
@@ -1347,41 +1496,37 @@ function startOfDay(date: Date) {
             <View style={styles.modeSwitchLight}>
               <ModeButton
                 label="Entrar"
+                icon="login"
                 active={authMode === "login"}
-                onPress={() => {
-                  setAuthMode("login");
-                  setAuthError(null);
-                }}
+                onPress={() => switchAuthMode("login")}
               />
               <ModeButton
                 label="Registro"
+                icon="register"
                 active={authMode === "register"}
-                onPress={() => {
-                  setAuthMode("register");
-                  setAuthError(null);
-                }}
+                onPress={() => switchAuthMode("register")}
               />
             </View>
             <View style={styles.authFormHeading}>
               <Text style={styles.authFormTitle}>
-                {authMode === "login" ? "Que bueno verte" : "Crea tu cuenta"}
-              </Text>
-              <Text style={styles.authFormCopy}>
-                {authMode === "login"
-                  ? "Tu proximo partido esta a un pase."
-                  : "Empieza a jugar y organiza partidos cerca de ti."}
+                {authMode === "login" ? "Inicia sesion" : "Crea tu cuenta"}
               </Text>
             </View>
             {authMode === "register" ? (
               <Field
-                label="Nombre"
+                label="Alias de jugador"
                 value={displayName}
                 onChangeText={(value) => {
                   setDisplayName(value);
                   setAuthError(null);
                 }}
-                placeholder="Tu nombre visible"
-                error={authError?.startsWith("Escribe tu nombre")}
+                placeholder="Ej. Felix10"
+                autoCapitalize="none"
+                error={
+                  authError?.startsWith("Indica un alias") ||
+                  authError?.startsWith("Este alias") ||
+                  authError?.startsWith("El alias")
+                }
               />
             ) : null}
             <Field
@@ -1394,7 +1539,12 @@ function startOfDay(date: Date) {
               placeholder="tu@email.com"
               keyboardType="email-address"
               autoComplete="email"
-              error={authError?.startsWith("Introduce un email")}
+              error={
+                authError?.startsWith("Introduce tu email") ||
+                authError?.startsWith("Introduce un email") ||
+                authError?.startsWith("El email") ||
+                authError?.startsWith("Email o contrasena")
+              }
             />
             <PasswordField
               label="Password"
@@ -1404,18 +1554,11 @@ function startOfDay(date: Date) {
                 setAuthError(null);
               }}
               error={
+                authError?.startsWith("Introduce tu contrasena") ||
                 authError?.startsWith("La contrasena") ||
-                authError?.startsWith("Revisa tu email o contrasena")
+                authError?.startsWith("Email o contrasena")
               }
             />
-            {authMode === "register" ? (
-              <View style={styles.passwordProtocol}>
-                <View style={styles.passwordProtocolDot} />
-                <Text style={styles.passwordProtocolText}>
-                  Minimo 8 caracteres. Usa una combinacion que solo tu conozcas.
-                </Text>
-              </View>
-            ) : null}
             {authError ? (
               <View style={styles.authErrorBox} accessibilityLiveRegion="polite">
                 <View style={styles.authErrorDot} />
@@ -1723,7 +1866,7 @@ function startOfDay(date: Date) {
         <BottomNav
           active="profile"
           onHome={goHome}
-          onCreate={() => setAppTab("create")}
+          onCreate={startMatchCreate}
           onProfile={() => setAppTab("profile")}
         />
       </SafeAreaView>
@@ -1804,7 +1947,9 @@ function startOfDay(date: Date) {
         >
           <View style={styles.screenHeader}>
             <View>
-              <Text style={styles.screenTitle}>Nuevo partido</Text>
+              <Text style={styles.screenTitle}>
+                {editingMatchId ? "Editar partido" : "Nuevo partido"}
+              </Text>
             </View>
             <Pressable
               style={styles.closePill}
@@ -1955,7 +2100,9 @@ function startOfDay(date: Date) {
               onPress={openCreatePreview}
               disabled={loading}
             >
-              <Text style={styles.createPreviewButtonText}>Ver vista previa</Text>
+              <Text style={styles.createPreviewButtonText}>
+                {editingMatchId ? "Revisar cambios" : "Ver vista previa"}
+              </Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -1971,13 +2118,14 @@ function startOfDay(date: Date) {
           pricePerPerson={newPricePerPerson}
           latitude={newLatitude}
           longitude={newLongitude}
+          editing={Boolean(editingMatchId)}
           onClose={() => setShowCreatePreview(false)}
           onCreate={createMatch}
         />
         <BottomNav
           active="create"
           onHome={goHome}
-          onCreate={() => setAppTab("create")}
+          onCreate={startMatchCreate}
           onProfile={() => setAppTab("profile")}
         />
       </SafeAreaView>
@@ -2096,8 +2244,46 @@ function startOfDay(date: Date) {
                     <TeamRoster
                       match={selectedMatch}
                       onOpenProfile={openPublicProfile}
+                      canRemovePlayers={isAdmin}
+                      onRemovePlayer={(userId) =>
+                        removeMatchPlayer(selectedMatch.id, userId)
+                      }
                     />
                   </View>
+
+                  {isAdmin ? (
+                    <View style={styles.detailAdminPanel}>
+                      <View>
+                        <Text style={styles.detailAdminEyebrow}>Admin</Text>
+                        <Text style={styles.detailAdminTitle}>Gestionar partido</Text>
+                      </View>
+                      <View style={styles.detailAdminActions}>
+                        <Pressable
+                          style={styles.adminEditMatchButton}
+                          onPress={() => startMatchEdit(selectedMatch)}
+                          disabled={loading}
+                        >
+                          <Text style={styles.adminEditMatchText}>Editar</Text>
+                        </Pressable>
+                        {selectedMatch.status !== "CANCELLED" ? (
+                          <Pressable
+                            style={styles.adminCancelMatchButton}
+                            onPress={() => cancelMatch(selectedMatch.id)}
+                            disabled={loading}
+                          >
+                            <Text style={styles.adminCancelMatchText}>Cancelar</Text>
+                          </Pressable>
+                        ) : null}
+                        <Pressable
+                          style={styles.adminDeleteMatchButton}
+                          onPress={() => deleteMatch(selectedMatch.id)}
+                          disabled={loading}
+                        >
+                          <Text style={styles.adminDeleteMatchText}>Borrar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : null}
 
                   <View style={styles.detailActionPanel}>
                     {selectedIsParticipant && selectedMatch.status !== "CANCELLED" ? (
@@ -2169,7 +2355,7 @@ function startOfDay(date: Date) {
                         </View>
                       </>
                     )}
-                    {selectedIsOwner && selectedMatch.status !== "CANCELLED" ? (
+                    {selectedIsOwner && !isAdmin && selectedMatch.status !== "CANCELLED" ? (
                       <Pressable
                         style={styles.cancelMatchButton}
                         onPress={() => cancelMatch(selectedMatch.id)}
@@ -2404,7 +2590,7 @@ function startOfDay(date: Date) {
         <BottomNav
           active="home"
           onHome={goHome}
-          onCreate={() => setAppTab("create")}
+          onCreate={startMatchCreate}
           onProfile={() => setAppTab("profile")}
         />
       </SafeAreaView>
@@ -2513,7 +2699,7 @@ function startOfDay(date: Date) {
       <BottomNav
         active="home"
         onHome={goHome}
-        onCreate={() => setAppTab("create")}
+        onCreate={startMatchCreate}
         onProfile={() => setAppTab("profile")}
       />
     </SafeAreaView>
@@ -4029,17 +4215,33 @@ function OccupancyBar({
 function TeamRoster({
   match,
   onOpenProfile,
+  canRemovePlayers = false,
+  onRemovePlayer,
 }: {
   match: MatchResponse;
   onOpenProfile?: (userId: string) => void;
+  canRemovePlayers?: boolean;
+  onRemovePlayer?: (userId: string) => void;
 }) {
   const teamA = match.teams?.teamA ?? [];
   const teamB = match.teams?.teamB ?? [];
 
   return (
     <View style={styles.rosterGrid}>
-      <RosterColumn title="Equipo A" players={teamA} onOpenProfile={onOpenProfile} />
-      <RosterColumn title="Equipo B" players={teamB} onOpenProfile={onOpenProfile} />
+      <RosterColumn
+        title="Equipo A"
+        players={teamA}
+        onOpenProfile={onOpenProfile}
+        canRemovePlayers={canRemovePlayers}
+        onRemovePlayer={onRemovePlayer}
+      />
+      <RosterColumn
+        title="Equipo B"
+        players={teamB}
+        onOpenProfile={onOpenProfile}
+        canRemovePlayers={canRemovePlayers}
+        onRemovePlayer={onRemovePlayer}
+      />
     </View>
   );
 }
@@ -4048,10 +4250,14 @@ function RosterColumn({
   title,
   players,
   onOpenProfile,
+  canRemovePlayers,
+  onRemovePlayer,
 }: {
   title: string;
   players: MatchPlayerResponse[];
   onOpenProfile?: (userId: string) => void;
+  canRemovePlayers?: boolean;
+  onRemovePlayer?: (userId: string) => void;
 }) {
   return (
     <View style={styles.rosterColumn}>
@@ -4060,20 +4266,29 @@ function RosterColumn({
         <Text style={styles.rosterEmpty}>Sin jugadores</Text>
       ) : (
         players.map((player) => (
-          <Pressable
-            key={player.participationId}
-            style={styles.rosterPlayer}
-            onPress={() => onOpenProfile?.(player.userId)}
-          >
-            <View style={styles.rosterAvatar}>
-              <Text style={styles.rosterAvatarText}>
-                {(player.username || player.displayName).charAt(0).toUpperCase()}
+          <View key={player.participationId} style={styles.rosterPlayer}>
+            <Pressable
+              style={styles.rosterPlayerProfile}
+              onPress={() => onOpenProfile?.(player.userId)}
+            >
+              <View style={styles.rosterAvatar}>
+                <Text style={styles.rosterAvatarText}>
+                  {(player.username || player.displayName).charAt(0).toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.rosterName} numberOfLines={1}>
+                {publicHandle(player)}
               </Text>
-            </View>
-            <Text style={styles.rosterName} numberOfLines={1}>
-              {publicHandle(player)}
-            </Text>
-          </Pressable>
+            </Pressable>
+            {canRemovePlayers ? (
+              <Pressable
+                style={styles.rosterRemoveButton}
+                onPress={() => onRemovePlayer?.(player.userId)}
+              >
+                <Text style={styles.rosterRemoveText}>Quitar</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ))
       )}
     </View>
@@ -4257,35 +4472,163 @@ function validateAuthForm({
   password: string;
 }) {
   if (authMode === "register" && !displayName.trim()) {
-    return "Escribe tu nombre para que los demas jugadores te reconozcan.";
+    return "Indica un alias de jugador para completar el registro.";
+  }
+  if (authMode === "register" && displayName.trim().length > 80) {
+    return "El alias de jugador no puede superar 80 caracteres.";
+  }
+  if (!email) {
+    return "Introduce tu email.";
   }
   if (!/^\S+@\S+\.\S+$/.test(email)) {
     return "Introduce un email valido.";
   }
   if (!password) {
-    return "La contrasena es obligatoria.";
+    return "Introduce tu contrasena.";
   }
   if (authMode === "register" && password.length < 8) {
     return "La contrasena debe tener al menos 8 caracteres.";
   }
+  if (password.length > 72) {
+    return "La contrasena no puede superar 72 caracteres.";
+  }
   return null;
 }
 
-function authErrorMessage(message: string, authMode: AuthMode) {
-  const normalized = message.toLowerCase();
-  if (normalized.includes("email already registered")) {
-    return "Ya existe una cuenta con este email. Entra o usa otro email.";
+function readApiErrorText(body: string) {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    return "";
   }
-  if (normalized.includes("invalid credentials")) {
-    return "Revisa tu email o contrasena e intentalo de nuevo.";
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      message?: string;
+      detail?: string;
+      error?: string;
+      title?: string;
+      errors?: unknown;
+    };
+    const errorDetails =
+      parsed.errors && typeof parsed.errors === "object"
+        ? Object.values(parsed.errors as Record<string, unknown>)
+            .flat()
+            .join(" ")
+        : undefined;
+    const candidates = [
+      parsed.detail,
+      parsed.message,
+      parsed.error,
+      parsed.title,
+      Array.isArray(parsed.errors) ? parsed.errors.join(" ") : undefined,
+      errorDetails,
+    ];
+    return candidates.filter(Boolean).join(" ");
+  } catch {
+    return trimmed;
+  }
+}
+
+function authErrorMessage(error: unknown, authMode: AuthMode) {
+  const status = error instanceof ApiRequestError ? error.status : null;
+  const rawMessage =
+    error instanceof ApiRequestError
+      ? `${error.message} ${error.body}`
+      : error instanceof Error
+        ? error.message
+        : String(error);
+  const normalized = rawMessage.toLowerCase();
+
+  if (authMode === "register" && status === 409) {
+    if (normalized.includes("username") || normalized.includes("displayname")) {
+      return "Este alias de jugador ya esta en uso. Elige otro.";
+    }
+    return "El email ya esta en uso.";
+  }
+
+  if (authMode === "login" && status === 401) {
+    return "Email o contrasena incorrectos.";
+  }
+
+  if (authMode === "register" && (status === 401 || status === 403)) {
+    return "El email ya esta en uso.";
+  }
+
+  if (
+    normalized.includes("email already registered") ||
+    normalized.includes("email already exists") ||
+    normalized.includes("email already in use") ||
+    (normalized.includes("email") &&
+      (normalized.includes("already") ||
+        normalized.includes("existe") ||
+        normalized.includes("uso") ||
+        normalized.includes("use") ||
+        normalized.includes("registered") ||
+        normalized.includes("duplicate") ||
+        normalized.includes("conflict")))
+  ) {
+    return "El email ya esta en uso.";
+  }
+  if (
+    (normalized.includes("username") ||
+      normalized.includes("displayname") ||
+      normalized.includes("alias")) &&
+    (normalized.includes("already") ||
+      normalized.includes("existe") ||
+      normalized.includes("uso") ||
+      normalized.includes("taken") ||
+      normalized.includes("registered") ||
+      normalized.includes("duplicate") ||
+      normalized.includes("conflict"))
+  ) {
+    return "Este alias de jugador ya esta en uso. Elige otro.";
+  }
+  const isCredentialError =
+    normalized.includes("invalid credentials") ||
+    normalized.includes("bad credentials") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("401");
+
+  if (authMode === "login" && isCredentialError) {
+    return "Email o contrasena incorrectos.";
   }
   if (normalized.includes("must be") && normalized.includes("password")) {
     return "La contrasena debe tener al menos 8 caracteres.";
   }
-  if (authMode === "register" && normalized.includes("validation")) {
-    return "Revisa tus datos antes de crear la cuenta.";
+  if (
+    normalized.includes("email") &&
+    (normalized.includes("invalid") ||
+      normalized.includes("not well-formed") ||
+      normalized.includes("must be a well-formed"))
+  ) {
+    return "Introduce un email valido.";
   }
-  return "No hemos podido completar la solicitud. Intentalo de nuevo.";
+  if (status === 400 || normalized.includes("validation")) {
+    return authMode === "login"
+      ? "Revisa el email y la contrasena antes de continuar."
+      : "Revisa los datos del registro antes de continuar.";
+  }
+  if (status && status >= 500) {
+    return "El servicio no esta disponible ahora mismo. Intentalo en unos minutos.";
+  }
+  return authMode === "login"
+    ? "No se pudo iniciar sesion. Comprueba los datos e intentalo de nuevo."
+    : "No se pudo crear la cuenta. Comprueba los datos e intentalo de nuevo.";
+}
+
+function matchMutationErrorMessage(error: unknown) {
+  if (error instanceof ApiRequestError) {
+    if (error.status === 403) {
+      return "No tienes permisos para modificar este partido.";
+    }
+    if (error.status === 404 || error.status === 405) {
+      return "El backend no tiene disponible esta accion. Despliega la ultima version del backend o usa la API local actualizada.";
+    }
+    if (error.status >= 500) {
+      return "El servidor no pudo guardar los cambios. Intentalo de nuevo en unos minutos.";
+    }
+  }
+  return error instanceof Error ? error.message : "Error inesperado";
 }
 
 function CalendarPicker({
@@ -4517,6 +4860,7 @@ function CreatePreviewModal({
   pricePerPerson,
   latitude,
   longitude,
+  editing,
   onClose,
   onCreate,
 }: {
@@ -4531,6 +4875,7 @@ function CreatePreviewModal({
   pricePerPerson: string;
   latitude: number;
   longitude: number;
+  editing: boolean;
   onClose: () => void;
   onCreate: () => void;
 }) {
@@ -4571,7 +4916,9 @@ function CreatePreviewModal({
               {loading ? (
                 <ActivityIndicator color="#0A110E" />
               ) : (
-                <Text style={styles.previewPrimaryText}>Crear partido</Text>
+                <Text style={styles.previewPrimaryText}>
+                  {editing ? "Guardar cambios" : "Crear partido"}
+                </Text>
               )}
             </Pressable>
           </View>
@@ -4667,23 +5014,38 @@ function QuickChip({
 
 function ModeButton({
   label,
+  icon,
   active,
   onPress,
 }: {
   label: string;
+  icon?: "map" | "list" | "login" | "register";
   active: boolean;
   onPress: () => void;
 }) {
+  const resolvedIcon = icon ?? (label === "Mapa" ? "map" : "list");
+
   return (
     <Pressable
       onPress={onPress}
       style={[styles.modeButton, active && styles.modeButtonActive]}
     >
       <View style={styles.modeIconBox}>
-        {label === "Mapa" ? (
+        {resolvedIcon === "map" ? (
           <>
             <View style={styles.modeMapPin} />
             <View style={styles.modeMapDot} />
+          </>
+        ) : resolvedIcon === "login" ? (
+          <>
+            <View style={styles.modeLoginDoor} />
+            <Text style={styles.modeLoginArrow}>{">"}</Text>
+          </>
+        ) : resolvedIcon === "register" ? (
+          <>
+            <View style={styles.modeRegisterHead} />
+            <View style={styles.modeRegisterBody} />
+            <Text style={styles.modeRegisterPlus}>+</Text>
           </>
         ) : (
           <>
@@ -4919,12 +5281,12 @@ const styles = StyleSheet.create({
     maxWidth: 460,
     alignSelf: "center",
     alignItems: "center",
-    gap: Platform.OS === "android" ? 7 : 9,
+    gap: 4,
   },
   authLogoHalo: {
-    width: Platform.OS === "android" ? 112 : 128,
-    height: Platform.OS === "android" ? 112 : 128,
-    borderRadius: Platform.OS === "android" ? 34 : 38,
+    width: Platform.OS === "android" ? 78 : 88,
+    height: Platform.OS === "android" ? 78 : 88,
+    borderRadius: Platform.OS === "android" ? 24 : 27,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(179,243,81,0.10)",
@@ -4934,20 +5296,20 @@ const styles = StyleSheet.create({
   },
   authLogoBubbleOne: {
     position: "absolute",
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    right: -24,
-    top: -20,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    right: -18,
+    top: -16,
     backgroundColor: "rgba(179,243,81,0.28)",
   },
   authLogoBubbleTwo: {
     position: "absolute",
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    left: -18,
-    bottom: -14,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    left: -12,
+    bottom: -10,
     backgroundColor: "rgba(227,219,208,0.12)",
   },
   homeTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -4998,10 +5360,11 @@ const styles = StyleSheet.create({
   authContent: {
     flexGrow: 1,
     justifyContent: Platform.OS === "android" ? "flex-start" : "center",
-    paddingHorizontal: Platform.OS === "android" ? 18 : 24,
-    paddingTop: Platform.OS === "android" ? 34 : 24,
-    paddingBottom: 28,
-    gap: Platform.OS === "android" ? 14 : 18,
+    paddingHorizontal:
+      Platform.OS === "web" ? 18 : MOBILE_EDGE_PADDING,
+    paddingTop: Platform.OS === "android" ? 18 : 16,
+    paddingBottom: 18,
+    gap: 10,
   },
   authHeroMark: {
     width: 64,
@@ -5014,24 +5377,9 @@ const styles = StyleSheet.create({
   authHeroLetter: { color: "#0A110E", fontSize: 34, fontWeight: "900" },
   authBrand: {
     color: "#E3DBD0",
-    fontSize: Platform.OS === "android" ? 42 : 52,
+    fontSize: Platform.OS === "android" ? 34 : 38,
     fontWeight: "900",
     letterSpacing: 0,
-    textAlign: "center",
-  },
-  authKicker: {
-    color: "#8FEA6A",
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 0,
-    textTransform: "uppercase",
-    textAlign: "center",
-  },
-  authCopy: {
-    color: "#BDB6AE",
-    fontSize: Platform.OS === "android" ? 15 : 17,
-    lineHeight: Platform.OS === "android" ? 21 : 24,
-    maxWidth: 360,
     textAlign: "center",
   },
   authCard: {
@@ -5039,11 +5387,11 @@ const styles = StyleSheet.create({
     maxWidth: 460,
     alignSelf: "center",
     backgroundColor: "rgba(18,31,24,0.94)",
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: "rgba(143,234,106,0.18)",
-    padding: Platform.OS === "android" ? 16 : 20,
-    gap: Platform.OS === "android" ? 14 : 16,
+    padding: Platform.OS === "android" ? 12 : 14,
+    gap: Platform.OS === "android" ? 9 : 10,
     overflow: "hidden",
     shadowColor: "#000000",
     shadowOpacity: 0.28,
@@ -5069,17 +5417,16 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(227,219,208,0.05)",
   },
   modeSwitchLight: {
-    height: 54,
-    borderRadius: 27,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: "rgba(247,241,232,0.07)",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.08)",
     flexDirection: "row",
-    padding: 6,
+    padding: 5,
   },
-  authFormHeading: { gap: 3, paddingTop: 2 },
-  authFormTitle: { color: "#F7F1E8", fontSize: 22, fontWeight: "900" },
-  authFormCopy: { color: "rgba(227,219,208,0.66)", fontSize: 13, lineHeight: 18 },
+  authFormHeading: { paddingTop: 0 },
+  authFormTitle: { color: "#F7F1E8", fontSize: 19, fontWeight: "900" },
   modeSwitchDark: {
     flex: 1,
     height: 42,
@@ -5138,6 +5485,48 @@ const styles = StyleSheet.create({
     marginVertical: 1,
     alignSelf: "flex-start",
   },
+  modeLoginDoor: {
+    position: "absolute",
+    width: 10,
+    height: 15,
+    borderRadius: 2,
+    borderWidth: 2,
+    borderColor: "rgba(227,219,208,0.76)",
+    left: 1,
+  },
+  modeLoginArrow: {
+    position: "absolute",
+    right: 0,
+    color: "#7FEF9B",
+    fontSize: 15,
+    fontWeight: "900",
+    lineHeight: 16,
+  },
+  modeRegisterHead: {
+    position: "absolute",
+    top: 1,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(227,219,208,0.76)",
+  },
+  modeRegisterBody: {
+    position: "absolute",
+    bottom: 1,
+    width: 14,
+    height: 7,
+    borderRadius: 5,
+    backgroundColor: "rgba(227,219,208,0.76)",
+  },
+  modeRegisterPlus: {
+    position: "absolute",
+    right: -3,
+    top: -4,
+    color: "#7FEF9B",
+    fontSize: 13,
+    fontWeight: "900",
+    lineHeight: 14,
+  },
   modeIcon: {
     color: "rgba(227,219,208,0.72)",
     fontSize: 17,
@@ -5152,9 +5541,9 @@ const styles = StyleSheet.create({
   fieldBlock: { gap: 5 },
   fieldLabel: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
   input: {
-    minHeight: 46,
-    borderRadius: 14,
-    paddingHorizontal: 14,
+    minHeight: 42,
+    borderRadius: 13,
+    paddingHorizontal: 12,
     backgroundColor: "rgba(247,241,232,0.10)",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.12)",
@@ -5166,35 +5555,32 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(146,39,39,0.15)",
   },
   passwordInputWrap: {
-    minHeight: 46,
-    borderRadius: 14,
-    paddingLeft: 14,
-    paddingRight: 7,
+    minHeight: 42,
+    borderRadius: 13,
+    paddingLeft: 12,
+    paddingRight: 6,
     backgroundColor: "rgba(247,241,232,0.10)",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.12)",
     flexDirection: "row",
     alignItems: "center",
   },
-  passwordInput: { flex: 1, color: "#F7F1E8", fontSize: 14, minHeight: 46 },
+  passwordInput: { flex: 1, color: "#F7F1E8", fontSize: 14, minHeight: 42 },
   passwordVisibilityButton: {
-    minWidth: 54,
-    minHeight: 34,
-    borderRadius: 17,
+    minWidth: 48,
+    minHeight: 30,
+    borderRadius: 15,
     backgroundColor: "rgba(143,234,106,0.13)",
     alignItems: "center",
     justifyContent: "center",
   },
   passwordVisibilityText: { color: "#A7F47D", fontSize: 11, fontWeight: "900" },
-  passwordProtocol: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: -5 },
-  passwordProtocolDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#8FEA6A", marginTop: 5 },
-  passwordProtocolText: { flex: 1, color: "rgba(227,219,208,0.62)", fontSize: 11, lineHeight: 16 },
   authErrorBox: {
     flexDirection: "row",
     gap: 8,
     alignItems: "flex-start",
-    padding: 11,
-    borderRadius: 14,
+    padding: 9,
+    borderRadius: 13,
     backgroundColor: "rgba(146,39,39,0.18)",
     borderWidth: 1,
     borderColor: "rgba(255,128,128,0.34)",
@@ -5202,14 +5588,14 @@ const styles = StyleSheet.create({
   authErrorDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#FF8C8C", marginTop: 4 },
   authErrorText: { flex: 1, color: "#FFD1D1", fontSize: 12, lineHeight: 17, fontWeight: "700" },
   authButton: {
-    minHeight: 54,
-    borderRadius: 27,
+    minHeight: 48,
+    borderRadius: 24,
     backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
   },
   authButtonDisabled: { opacity: 0.72 },
-  authButtonText: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
+  authButtonText: { color: "#0A110E", fontSize: 15, fontWeight: "900" },
   authDividerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -5226,10 +5612,10 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   googleButton: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     alignSelf: "center",
-    borderRadius: 24,
+    borderRadius: 22,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "rgba(10,17,14,0.12)",
@@ -5286,7 +5672,7 @@ const styles = StyleSheet.create({
     borderColor: "#FFFFFF",
   },
   homeHeader: {
-    paddingHorizontal: Platform.OS === "web" ? 0 : 14,
+    paddingHorizontal: Platform.OS === "web" ? 0 : MOBILE_EDGE_PADDING,
     paddingTop: Platform.OS === "android" ? 6 : 0,
     paddingBottom: 8,
   },
@@ -5385,7 +5771,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0,
   },
   homeSearchWrap: {
-    paddingHorizontal: Platform.OS === "web" ? 0 : 14,
+    paddingHorizontal: Platform.OS === "web" ? 0 : MOBILE_EDGE_PADDING,
     paddingBottom: 8,
   },
   homeSearchPill: {
@@ -5435,7 +5821,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    paddingHorizontal: Platform.OS === "web" ? 0 : 14,
+    paddingHorizontal: Platform.OS === "web" ? 0 : MOBILE_EDGE_PADDING,
     paddingBottom: 10,
   },
   refreshMiniButton: {
@@ -5782,8 +6168,8 @@ mapMarkerCount: {
 },
   popupCard: {
     position: "absolute",
-    left: Platform.OS === "web" ? "50%" : 16,
-    right: Platform.OS === "web" ? undefined : 16,
+    left: Platform.OS === "web" ? "50%" : MOBILE_EDGE_PADDING,
+    right: Platform.OS === "web" ? undefined : MOBILE_EDGE_PADDING,
     width: Platform.OS === "web" ? 420 : undefined,
     transform: Platform.OS === "web" ? [{ translateX: -210 }] : undefined,
     bottom: Platform.OS === "android" ? 112 : 108,
@@ -5938,7 +6324,7 @@ mapMarkerCount: {
     marginTop: 0,
   },
   listContent: {
-    paddingHorizontal: 14,
+    paddingHorizontal: MOBILE_EDGE_PADDING,
     paddingTop: 8,
     paddingBottom: Platform.OS === "android" ? 116 : 104,
     gap: 10,
@@ -6183,8 +6569,8 @@ mapMarkerCount: {
   emptyText: { color: "#BDB6AE", fontSize: 14, marginTop: 6 },
   bottomNav: {
     position: "absolute",
-    left: Platform.OS === "web" ? "50%" : 18,
-    right: Platform.OS === "web" ? undefined : 18,
+    left: Platform.OS === "web" ? "50%" : MOBILE_EDGE_PADDING,
+    right: Platform.OS === "web" ? undefined : MOBILE_EDGE_PADDING,
     width: Platform.OS === "web" ? 420 : undefined,
     transform: Platform.OS === "web" ? [{ translateX: -210 }] : undefined,
     minHeight: 58,
@@ -6233,7 +6619,7 @@ mapMarkerCount: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 760 : undefined,
     alignSelf: "center",
-    paddingHorizontal: Platform.OS === "web" ? 24 : 16,
+    paddingHorizontal: Platform.OS === "web" ? 24 : MOBILE_EDGE_PADDING,
     gap: 14,
   },
   profileHeader: {
@@ -6575,7 +6961,7 @@ mapMarkerCount: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 760 : undefined,
     alignSelf: "center",
-    paddingHorizontal: Platform.OS === "web" ? 24 : 16,
+    paddingHorizontal: Platform.OS === "web" ? 24 : MOBILE_EDGE_PADDING,
     gap: 16,
   },
   locationScreen: {
@@ -6583,7 +6969,7 @@ mapMarkerCount: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 920 : undefined,
     alignSelf: "center",
-    paddingHorizontal: Platform.OS === "web" ? 24 : 22,
+    paddingHorizontal: Platform.OS === "web" ? 24 : MOBILE_EDGE_PADDING,
     gap: 16,
   },
   locationPickerShell: {
@@ -6603,8 +6989,8 @@ mapMarkerCount: {
   locationSearchPanel: {
     position: "absolute",
     top: 14,
-    left: 14,
-    right: 14,
+    left: MOBILE_EDGE_PADDING,
+    right: MOBILE_EDGE_PADDING,
     zIndex: 12,
     flexDirection: "row",
     gap: 8,
@@ -7033,7 +7419,7 @@ mapMarkerCount: {
     width: "100%",
     maxWidth: Platform.OS === "web" ? 820 : undefined,
     alignSelf: "center",
-    paddingHorizontal: Platform.OS === "web" ? 24 : 16,
+    paddingHorizontal: Platform.OS === "web" ? 24 : MOBILE_EDGE_PADDING,
     gap: 16,
   },
   detailHeroCard: {
@@ -7181,6 +7567,58 @@ mapMarkerCount: {
     padding: 12,
     gap: 10,
   },
+  detailAdminPanel: {
+    borderRadius: 24,
+    backgroundColor: "rgba(127,239,155,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(127,239,155,0.22)",
+    padding: 12,
+    gap: 10,
+  },
+  detailAdminEyebrow: {
+    color: "#8FEA6A",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  detailAdminTitle: {
+    color: "#F7F1E8",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  detailAdminActions: { flexDirection: "row", gap: 8 },
+  adminEditMatchButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 18,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminEditMatchText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
+  adminCancelMatchButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 18,
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminCancelMatchText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  adminDeleteMatchButton: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 18,
+    backgroundColor: "rgba(217,88,88,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(217,88,88,0.40)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminDeleteMatchText: { color: "#FFD1D1", fontSize: 12, fontWeight: "900" },
   detailActionTitle: {
     color: "rgba(247,241,232,0.78)",
     fontSize: 13,
@@ -7221,6 +7659,13 @@ mapMarkerCount: {
   rosterTitle: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
   rosterEmpty: { color: "rgba(247,241,232,0.54)", fontSize: 12, fontWeight: "800" },
   rosterPlayer: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rosterPlayerProfile: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   rosterAvatar: {
     width: 26,
     height: 26,
@@ -7231,13 +7676,24 @@ mapMarkerCount: {
   },
   rosterAvatarText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
   rosterName: { flex: 1, color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  rosterRemoveButton: {
+    minHeight: 28,
+    borderRadius: 12,
+    backgroundColor: "rgba(217,88,88,0.22)",
+    borderWidth: 1,
+    borderColor: "rgba(217,88,88,0.36)",
+    paddingHorizontal: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  rosterRemoveText: { color: "#FFD1D1", fontSize: 10, fontWeight: "900" },
   actionButtonDisabled: { opacity: 0.46 },
   publicProfileBackdrop: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.62)",
     alignItems: "center",
     justifyContent: "center",
-    padding: 20,
+    padding: MOBILE_EDGE_PADDING,
   },
   publicProfileCard: {
     width: "100%",
