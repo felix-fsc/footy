@@ -175,7 +175,6 @@ type PlayerProfileResponse = {
 };
 
 const DEPLOYED_API_BASE_URL = "https://footy-backend-576b.onrender.com";
-const LOCAL_WEB_API_BASE_URL = "http://localhost:8080";
 
 const SESSION_STORAGE_KEY = "footy.session.v1";
 const INTRO_VIDEO = require("./assets/intro.mp4");
@@ -210,8 +209,7 @@ declare const process: {
 };
 
 const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ||
-  (Platform.OS === "web" ? LOCAL_WEB_API_BASE_URL : DEPLOYED_API_BASE_URL);
+  process.env.EXPO_PUBLIC_API_BASE_URL || DEPLOYED_API_BASE_URL;
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_ANDROID_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
