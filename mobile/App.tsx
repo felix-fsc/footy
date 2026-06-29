@@ -40,139 +40,30 @@ import {
   TextInput,
   View,
 } from "react-native";
-
-type AuthMode = "login" | "register";
-type HomeMode = "map" | "list";
-type MatchFilter = "all" | "mine";
-type DateFilter = "today" | "tomorrow" | "week" | "all";
-type AppTab = "home" | "create" | "detail" | "profile" | "location";
-type TeamSide = "A" | "B";
-type UserRole = "PLAYER" | "ADMIN";
-type PlayerPosition = "GOALKEEPER" | "DEFENDER" | "MIDFIELDER" | "FORWARD";
-type MapLocation = { latitude: number; longitude: number };
-type MapPoint = { x: number; y: number };
-type MapTile = { key: string; x: number; y: number; uri: string };
-type GeocodeResult = { lat: string; lon: string; display_name: string };
-type NotificationsModule = typeof import("expo-notifications");
-
-type AuthResponse = {
-  accessToken: string;
-  expiresAt?: string;
-  user: {
-    id: string;
-    email: string;
-    displayName: string;
-    username?: string | null;
-    role?: UserRole | null;
-  };
-};
-
-class ApiRequestError extends Error {
-  status: number;
-  body: string;
-
-  constructor(status: number, body: string) {
-    super(readApiErrorText(body) || `HTTP ${status}`);
-    this.name = "ApiRequestError";
-    this.status = status;
-    this.body = body;
-  }
-}
-
-type StoredSession = {
-  accessToken: string;
-  expiresAt?: string;
-  user: AuthResponse["user"];
-};
-
-type MatchPlayerResponse = {
-  participationId: string;
-  userId: string;
-  displayName: string;
-  username?: string | null;
-  teamSide: TeamSide;
-  joinedAt: string;
-};
-
-type MatchResponse = {
-  id: string;
-  title: string;
-  startsAt: string;
-  maxPlayersPerTeam: number;
-  pricePerPersonCents: number;
-  coverImageUrl?: string | null;
-  status: string;
-  createdBy: {
-    id: string;
-    displayName: string;
-    username?: string | null;
-  };
-  field: null | {
-    id: string;
-    name: string;
-    address: string | null;
-    city: string | null;
-    latitude?: number | null;
-    longitude?: number | null;
-  };
-  occupancy: {
-    teamAPlayers: number;
-    teamBPlayers: number;
-    maxPlayersPerTeam: number;
-    totalPlayers: number;
-    totalCapacity: number;
-    remainingTeamA: number;
-    remainingTeamB: number;
-  };
-  teams?: {
-    teamA: MatchPlayerResponse[];
-    teamB: MatchPlayerResponse[];
-  };
-};
-
-type FieldMatchGroup = {
-  key: string;
-  fieldName: string;
-  latitude: number;
-  longitude: number;
-  matches: MatchResponse[];
-};
-
-
-
-
-type MessageResponse = {
-  id: string;
-  matchId: string;
-  author: {
-    id: string;
-    displayName: string;
-    username?: string | null;
-  };
-  content: string;
-  sentAt: string;
-};
-
-type SavedFieldResponse = {
-  id: string;
-  name: string;
-  address: string | null;
-  city: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-};
-
-type PlayerProfileResponse = {
-  id: string | null;
-  userId?: string | null;
-  displayName: string;
-  username?: string | null;
-  email: string;
-  fullName: string | null;
-  bio: string | null;
-  preferredPosition: PlayerPosition | null;
-  city: string | null;
-};
+import { ApiRequestError } from "./src/api/errors";
+import { TeamOccupancy, TeamRoster } from "./src/components/matches/TeamRoster";
+import type {
+  AppTab,
+  AuthMode,
+  AuthResponse,
+  DateFilter,
+  FieldMatchGroup,
+  GeocodeResult,
+  HomeMode,
+  MapLocation,
+  MapPoint,
+  MapTile,
+  MatchFilter,
+  MatchResponse,
+  MessageResponse,
+  NotificationsModule,
+  PlayerPosition,
+  PlayerProfileResponse,
+  SavedFieldResponse,
+  StoredSession,
+  TeamSide,
+  UserRole,
+} from "./src/types/domain";
 
 const DEPLOYED_API_BASE_URL = "https://footy-backend-576b.onrender.com";
 
@@ -879,6 +770,10 @@ function startOfDay(date: Date) {
           setAppTab("create");
           return true;
         }
+        if (appTab === "create" && editingMatchId) {
+          closeMatchEditor();
+          return true;
+        }
         if (appTab === "detail" || appTab === "create" || appTab === "profile") {
           goHome();
           return true;
@@ -890,6 +785,7 @@ function startOfDay(date: Date) {
     return () => subscription.remove();
   }, [
     appTab,
+    editingMatchId,
     profileEditing,
     selectedMatchId,
     showCreateCalendar,
@@ -1396,8 +1292,22 @@ function startOfDay(date: Date) {
   }
 
   function goHome() {
+    setEditingMatchId(null);
+    setShowCreatePreview(false);
+    setShowCreateCalendar(false);
     setSelectedMatchId(null);
     setAppTab("home");
+  }
+
+  function closeMatchEditor() {
+    const matchId = editingMatchId;
+    resetMatchDraft();
+    if (matchId) {
+      setSelectedMatchId(matchId);
+      setAppTab("detail");
+      return;
+    }
+    goHome();
   }
 
   function resetMatchDraft() {
@@ -1945,17 +1855,42 @@ function startOfDay(date: Date) {
         >
           <View style={styles.screenHeader}>
             <View>
+              {editingMatchId ? (
+                <Text style={styles.smallLabel}>Editando partido</Text>
+              ) : null}
               <Text style={styles.screenTitle}>
                 {editingMatchId ? "Editar partido" : "Nuevo partido"}
               </Text>
             </View>
             <Pressable
-              style={styles.closePill}
-              onPress={goHome}
+              style={({ pressed }) => [
+                styles.closePill,
+                editingMatchId && styles.editClosePill,
+                pressed && styles.closePillPressed,
+              ]}
+              onPress={editingMatchId ? closeMatchEditor : goHome}
             >
-              <Text style={styles.closePillText}>Cerrar</Text>
+              <Text style={styles.closePillText}>
+                {editingMatchId ? "Volver" : "Cerrar"}
+              </Text>
             </Pressable>
           </View>
+
+          {editingMatchId ? (
+            <View style={styles.editModeBanner}>
+              <View style={styles.editModeIcon}>
+                <PencilIcon />
+              </View>
+              <View style={styles.editModeTextWrap}>
+                <Text style={styles.editModeTitle} numberOfLines={1}>
+                  {selectedMatch?.title ?? newTitle}
+                </Text>
+                <Text style={styles.editModeMeta} numberOfLines={1}>
+                  Los cambios se guardaran en el partido publicado
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.createCard}>
             <View style={styles.createCardBubbleOne} />
@@ -2099,7 +2034,7 @@ function startOfDay(date: Date) {
               disabled={loading}
             >
               <Text style={styles.createPreviewButtonText}>
-                {editingMatchId ? "Revisar cambios" : "Ver vista previa"}
+                {editingMatchId ? "Previsualizar cambios" : "Ver vista previa"}
               </Text>
             </Pressable>
           </View>
@@ -2168,10 +2103,31 @@ function startOfDay(date: Date) {
                 >
                   <View style={styles.detailCoverOverlay} />
                   <View style={styles.detailCoverTop}>
-                    <StatusBadge status={selectedMatch.status} />
-                    <Text style={styles.detailCoverPill}>
-                      {formatPriceFromCents(selectedMatch.pricePerPersonCents)}
-                    </Text>
+                    <View style={styles.detailCoverTopLeft}>
+                      <StatusBadge status={selectedMatch.status} />
+                      {isAdmin ? (
+                        <Text style={styles.adminInlinePill}>Admin</Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.detailCoverTopActions}>
+                      <Text style={styles.detailCoverPill}>
+                        {formatPriceFromCents(selectedMatch.pricePerPersonCents)}
+                      </Text>
+                      {isAdmin ? (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.adminFloatingEditButton,
+                            pressed && styles.adminFloatingButtonPressed,
+                          ]}
+                          onPress={() => startMatchEdit(selectedMatch)}
+                          disabled={loading}
+                          accessibilityRole="button"
+                          accessibilityLabel="Editar partido"
+                        >
+                          <PencilIcon />
+                        </Pressable>
+                      ) : null}
+                    </View>
                   </View>
                   <View style={styles.detailCoverContent}>
                     <Text style={styles.detailTitle} numberOfLines={2}>
@@ -2229,6 +2185,41 @@ function startOfDay(date: Date) {
                     <Text style={styles.directionsButtonText}>Como llegar</Text>
                   </Pressable>
 
+                  {isAdmin ? (
+                    <View style={styles.detailAdminInlineActions}>
+                      {selectedMatch.status !== "CANCELLED" ? (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.adminInlineActionButton,
+                            pressed && styles.inlineActionPressed,
+                          ]}
+                          onPress={() => cancelMatch(selectedMatch.id)}
+                          disabled={loading}
+                        >
+                          <Text style={styles.adminInlineActionText}>Cancelar</Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.adminInlineActionButton,
+                          styles.adminInlineDangerButton,
+                          pressed && styles.inlineActionPressed,
+                        ]}
+                        onPress={() => deleteMatch(selectedMatch.id)}
+                        disabled={loading}
+                      >
+                        <Text
+                          style={[
+                            styles.adminInlineActionText,
+                            styles.adminInlineDangerText,
+                          ]}
+                        >
+                          Borrar
+                        </Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+
                   <View style={styles.detailSection}>
                     <View style={styles.detailSectionHeader}>
                       <Text style={styles.detailSectionTitle}>Jugadores</Text>
@@ -2248,40 +2239,6 @@ function startOfDay(date: Date) {
                       }
                     />
                   </View>
-
-                  {isAdmin ? (
-                    <View style={styles.detailAdminPanel}>
-                      <View>
-                        <Text style={styles.detailAdminEyebrow}>Admin</Text>
-                        <Text style={styles.detailAdminTitle}>Gestionar partido</Text>
-                      </View>
-                      <View style={styles.detailAdminActions}>
-                        <Pressable
-                          style={styles.adminEditMatchButton}
-                          onPress={() => startMatchEdit(selectedMatch)}
-                          disabled={loading}
-                        >
-                          <Text style={styles.adminEditMatchText}>Editar</Text>
-                        </Pressable>
-                        {selectedMatch.status !== "CANCELLED" ? (
-                          <Pressable
-                            style={styles.adminCancelMatchButton}
-                            onPress={() => cancelMatch(selectedMatch.id)}
-                            disabled={loading}
-                          >
-                            <Text style={styles.adminCancelMatchText}>Cancelar</Text>
-                          </Pressable>
-                        ) : null}
-                        <Pressable
-                          style={styles.adminDeleteMatchButton}
-                          onPress={() => deleteMatch(selectedMatch.id)}
-                          disabled={loading}
-                        >
-                          <Text style={styles.adminDeleteMatchText}>Borrar</Text>
-                        </Pressable>
-                      </View>
-                    </View>
-                  ) : null}
 
                   <View style={styles.detailActionPanel}>
                     {selectedIsParticipant && selectedMatch.status !== "CANCELLED" ? (
@@ -2899,6 +2856,19 @@ function EditProfileIcon({ active }: { active: boolean }) {
     <View style={styles.editIcon}>
       <View style={styles.editIconBody} />
       <View style={styles.editIconTip} />
+    </View>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <View style={styles.pencilIcon}>
+      <View style={styles.pencilIconCore}>
+        <View style={styles.pencilIconEraser} />
+        <View style={styles.pencilIconBody} />
+        <View style={styles.pencilIconTip} />
+      </View>
+      <View style={styles.pencilIconStroke} />
     </View>
   );
 }
@@ -4210,126 +4180,6 @@ function OccupancyBar({
   );
 }
 
-function TeamRoster({
-  match,
-  onOpenProfile,
-  canRemovePlayers = false,
-  onRemovePlayer,
-}: {
-  match: MatchResponse;
-  onOpenProfile?: (userId: string) => void;
-  canRemovePlayers?: boolean;
-  onRemovePlayer?: (userId: string) => void;
-}) {
-  const teamA = match.teams?.teamA ?? [];
-  const teamB = match.teams?.teamB ?? [];
-
-  return (
-    <View style={styles.rosterGrid}>
-      <RosterColumn
-        title="Equipo A"
-        players={teamA}
-        onOpenProfile={onOpenProfile}
-        canRemovePlayers={canRemovePlayers}
-        onRemovePlayer={onRemovePlayer}
-      />
-      <RosterColumn
-        title="Equipo B"
-        players={teamB}
-        onOpenProfile={onOpenProfile}
-        canRemovePlayers={canRemovePlayers}
-        onRemovePlayer={onRemovePlayer}
-      />
-    </View>
-  );
-}
-
-function RosterColumn({
-  title,
-  players,
-  onOpenProfile,
-  canRemovePlayers,
-  onRemovePlayer,
-}: {
-  title: string;
-  players: MatchPlayerResponse[];
-  onOpenProfile?: (userId: string) => void;
-  canRemovePlayers?: boolean;
-  onRemovePlayer?: (userId: string) => void;
-}) {
-  return (
-    <View style={styles.rosterColumn}>
-      <Text style={styles.rosterTitle}>{title}</Text>
-      {players.length === 0 ? (
-        <Text style={styles.rosterEmpty}>Sin jugadores</Text>
-      ) : (
-        players.map((player) => (
-          <View key={player.participationId} style={styles.rosterPlayer}>
-            <Pressable
-              style={styles.rosterPlayerProfile}
-              onPress={() => onOpenProfile?.(player.userId)}
-            >
-              <View style={styles.rosterAvatar}>
-                <Text style={styles.rosterAvatarText}>
-                  {(player.username || player.displayName).charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <Text style={styles.rosterName} numberOfLines={1}>
-                {publicHandle(player)}
-              </Text>
-            </Pressable>
-            {canRemovePlayers ? (
-              <Pressable
-                style={styles.rosterRemoveButton}
-                onPress={() => onRemovePlayer?.(player.userId)}
-              >
-                <Text style={styles.rosterRemoveText}>Quitar</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ))
-      )}
-    </View>
-  );
-}
-
-function TeamOccupancy({ match }: { match: MatchResponse }) {
-  const occupancy = match.occupancy;
-  const max = occupancy?.maxPlayersPerTeam ?? match.maxPlayersPerTeam;
-  const teamA = occupancy?.teamAPlayers ?? 0;
-  const teamB = occupancy?.teamBPlayers ?? 0;
-
-  return (
-    <View style={styles.teamGrid}>
-      <TeamBox label="Equipo A" value={teamA} max={max} />
-      <TeamBox label="Equipo B" value={teamB} max={max} />
-    </View>
-  );
-}
-
-function TeamBox({
-  label,
-  value,
-  max,
-}: {
-  label: string;
-  value: number;
-  max: number;
-}) {
-  const full = value >= max;
-  return (
-    <View style={[styles.teamBox, full && styles.teamBoxFull]}>
-      <Text style={styles.teamBoxLabel}>{label}</Text>
-      <Text style={styles.teamBoxValue}>
-        {value}/{max}
-      </Text>
-      <Text style={styles.teamBoxMeta}>
-        {full ? "Completo" : `${max - value} plazas`}
-      </Text>
-    </View>
-  );
-}
-
 function BottomNav({
   active,
   onHome,
@@ -4491,40 +4341,6 @@ function validateAuthForm({
     return "La contrasena no puede superar 72 caracteres.";
   }
   return null;
-}
-
-function readApiErrorText(body: string) {
-  const trimmed = body.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as {
-      message?: string;
-      detail?: string;
-      error?: string;
-      title?: string;
-      errors?: unknown;
-    };
-    const errorDetails =
-      parsed.errors && typeof parsed.errors === "object"
-        ? Object.values(parsed.errors as Record<string, unknown>)
-            .flat()
-            .join(" ")
-        : undefined;
-    const candidates = [
-      parsed.detail,
-      parsed.message,
-      parsed.error,
-      parsed.title,
-      Array.isArray(parsed.errors) ? parsed.errors.join(" ") : undefined,
-      errorDetails,
-    ];
-    return candidates.filter(Boolean).join(" ");
-  } catch {
-    return trimmed;
-  }
 }
 
 function authErrorMessage(error: unknown, authMode: AuthMode) {
@@ -6727,6 +6543,50 @@ mapMarkerCount: {
   },
   closeEditLineOne: { transform: [{ rotate: "45deg" }] },
   closeEditLineTwo: { transform: [{ rotate: "-45deg" }] },
+  pencilIcon: {
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pencilIconCore: {
+    width: 22,
+    height: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    transform: [{ rotate: "-34deg" }],
+  },
+  pencilIconEraser: {
+    width: 5,
+    height: 8,
+    borderTopLeftRadius: 3,
+    borderBottomLeftRadius: 3,
+    backgroundColor: "#E3DBD0",
+  },
+  pencilIconBody: {
+    width: 12,
+    height: 8,
+    backgroundColor: "#8FEA6A",
+  },
+  pencilIconTip: {
+    width: 0,
+    height: 0,
+    borderTopWidth: 4,
+    borderBottomWidth: 4,
+    borderLeftWidth: 6,
+    borderTopColor: "transparent",
+    borderBottomColor: "transparent",
+    borderLeftColor: "#F7F1E8",
+  },
+  pencilIconStroke: {
+    width: 14,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "rgba(247,241,232,0.55)",
+    marginTop: 7,
+    marginLeft: 7,
+    transform: [{ rotate: "-34deg" }],
+  },
   streakBanner: {
     minHeight: 58,
     borderRadius: 18,
@@ -7059,10 +6919,44 @@ mapMarkerCount: {
     height: 44,
     borderRadius: 19,
     backgroundColor: "rgba(227,219,208,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.10)",
     alignItems: "center",
     justifyContent: "center",
   },
+  editClosePill: {
+    backgroundColor: "rgba(143,234,106,0.13)",
+    borderColor: "rgba(143,234,106,0.30)",
+  },
+  closePillPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
+  editModeBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(143,234,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.24)",
+    padding: 12,
+  },
+  editModeIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(7,16,10,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editModeTextWrap: { flex: 1, minWidth: 0, gap: 3 },
+  editModeTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  editModeMeta: {
+    color: "rgba(247,241,232,0.70)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   createCard: {
     backgroundColor: "rgba(7,12,9,0.92)",
     borderRadius: 24,
@@ -7452,6 +7346,18 @@ mapMarkerCount: {
     justifyContent: "space-between",
     gap: 10,
   },
+  detailCoverTopLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  detailCoverTopActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   detailCoverPill: {
     overflow: "hidden",
     borderRadius: 18,
@@ -7461,6 +7367,37 @@ mapMarkerCount: {
     fontWeight: "900",
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  adminInlinePill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "rgba(7,16,10,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.34)",
+    color: "#8FEA6A",
+    fontSize: 10,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    textTransform: "uppercase",
+  },
+  adminFloatingEditButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(7,16,10,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000000",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  adminFloatingButtonPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.96 }],
   },
   detailCoverContent: { gap: 7 },
   detailTitle: {
@@ -7565,58 +7502,30 @@ mapMarkerCount: {
     padding: 12,
     gap: 10,
   },
-  detailAdminPanel: {
-    borderRadius: 24,
-    backgroundColor: "rgba(127,239,155,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(127,239,155,0.22)",
-    padding: 12,
-    gap: 10,
+  detailAdminInlineActions: {
+    flexDirection: "row",
+    gap: 8,
   },
-  detailAdminEyebrow: {
-    color: "#8FEA6A",
-    fontSize: 10,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  detailAdminTitle: {
-    color: "#F7F1E8",
-    fontSize: 16,
-    fontWeight: "900",
-    marginTop: 2,
-  },
-  detailAdminActions: { flexDirection: "row", gap: 8 },
-  adminEditMatchButton: {
+  adminInlineActionButton: {
     flex: 1,
-    minHeight: 44,
-    borderRadius: 18,
-    backgroundColor: "#8FEA6A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  adminEditMatchText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  adminCancelMatchButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 18,
+    minHeight: 42,
+    borderRadius: 17,
     backgroundColor: "rgba(247,241,232,0.12)",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
-  adminCancelMatchText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
-  adminDeleteMatchButton: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 18,
+  adminInlineDangerButton: {
     backgroundColor: "rgba(217,88,88,0.22)",
-    borderWidth: 1,
     borderColor: "rgba(217,88,88,0.40)",
-    alignItems: "center",
-    justifyContent: "center",
   },
-  adminDeleteMatchText: { color: "#FFD1D1", fontSize: 12, fontWeight: "900" },
+  inlineActionPressed: {
+    opacity: 0.76,
+    transform: [{ scale: 0.98 }],
+  },
+  adminInlineActionText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  adminInlineDangerText: { color: "#FFD1D1" },
   detailActionTitle: {
     color: "rgba(247,241,232,0.78)",
     fontSize: 13,
@@ -7630,61 +7539,6 @@ mapMarkerCount: {
     justifyContent: "center",
   },
   directionsButtonText: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
-  teamGrid: { flexDirection: "row", gap: 10, marginTop: 4 },
-  teamBox: {
-    flex: 1,
-    borderRadius: 18,
-    backgroundColor: "rgba(247,241,232,0.10)",
-    borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.10)",
-    padding: 12,
-    gap: 3,
-  },
-  teamBoxFull: { opacity: 0.62 },
-  teamBoxLabel: { color: "rgba(247,241,232,0.62)", fontSize: 12, fontWeight: "900" },
-  teamBoxValue: { color: "#F7F1E8", fontSize: 24, fontWeight: "900" },
-  teamBoxMeta: { color: "#8FEA6A", fontSize: 11, fontWeight: "800" },
-  rosterGrid: { flexDirection: "row", gap: 10, marginTop: 2 },
-  rosterColumn: {
-    flex: 1,
-    borderRadius: 18,
-    backgroundColor: "rgba(10,17,14,0.34)",
-    borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.08)",
-    padding: 12,
-    gap: 8,
-  },
-  rosterTitle: { color: "#F7F1E8", fontSize: 13, fontWeight: "900" },
-  rosterEmpty: { color: "rgba(247,241,232,0.54)", fontSize: 12, fontWeight: "800" },
-  rosterPlayer: { flexDirection: "row", alignItems: "center", gap: 8 },
-  rosterPlayerProfile: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  rosterAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#8FEA6A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rosterAvatarText: { color: "#0A110E", fontSize: 12, fontWeight: "900" },
-  rosterName: { flex: 1, color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
-  rosterRemoveButton: {
-    minHeight: 28,
-    borderRadius: 12,
-    backgroundColor: "rgba(217,88,88,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(217,88,88,0.36)",
-    paddingHorizontal: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rosterRemoveText: { color: "#FFD1D1", fontSize: 10, fontWeight: "900" },
   actionButtonDisabled: { opacity: 0.46 },
   publicProfileBackdrop: {
     flex: 1,
