@@ -72,30 +72,32 @@ import type {
   TeamSide,
   UserRole,
 } from "./src/types/domain";
+import {
+  dateInputFromInstant,
+  datePartsFromOffset,
+  filterMatchByDate,
+  formatDate,
+  formatDraftPrice,
+  formatPriceFromCents,
+  formatTime,
+  getCalendarMonth,
+  getFallbackMatchCover,
+  getMatchCover,
+  getRandomMatchCover,
+  isMatchOpen,
+  isTeamFull,
+  monthDateParts,
+  positionLabel,
+  publicHandle,
+  timeInputFromInstant,
+  tomorrowDateParts,
+  userParticipatesInMatch,
+} from "./src/utils/matchUtils";
 
 const DEPLOYED_API_BASE_URL = "https://footy-backend-576b.onrender.com";
 
 const SESSION_STORAGE_KEY = "footy.session.v1";
 const INTRO_VIDEO = require("./assets/intro.mp4");
-const MATCH_COVER_IMAGES = [
-  "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1551958219-acbc608c6377?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1517927033932-b3d18e61fb3a?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1431324155629-1a6deb1dec8d?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1560272564-c83b66b1ad12?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1489944440615-453fc2b6a9a9?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1526232761682-d26e03ac148e?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1553778263-73a83bab9b0c?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1504016798967-59a258e9386d?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1535131749006-b7f58c99034b?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1517466787929-bc90951d0974?auto=format&fit=crop&w=1000&q=72",
-  "https://images.unsplash.com/photo-1511886929837-354d827aae26?auto=format&fit=crop&w=1000&q=72",
-];
-const DEFAULT_MATCH_COVER = MATCH_COVER_IMAGES[0];
 const MOBILE_EDGE_PADDING = 10;
 
 declare const process: {
@@ -275,88 +277,6 @@ const MAP_MIN_ZOOM = 11;
 const MAP_MAX_ZOOM = 17;
 const DEFAULT_MAP_CENTER = { latitude: 37.26142, longitude: -6.94472 };
 
-function datePartsFromOffset(daysFromToday: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + daysFromToday);
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function tomorrowDateParts() {
-  return datePartsFromOffset(1);
-}
-
-function monthDateParts(year: number, month: number, day: number) {
-  const yyyy = String(year);
-  const mm = String(month + 1).padStart(2, "0");
-  const dd = String(day).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function getCalendarMonth(offset: number) {
-  const date = new Date();
-  date.setDate(1);
-  date.setMonth(date.getMonth() + offset);
-  return { year: date.getFullYear(), month: date.getMonth() };
-}
-
-function formatPriceFromCents(value: number | null | undefined) {
-  const cents = value ?? 0;
-  if (cents <= 0) {
-    return "Gratis";
-  }
-  return `${(cents / 100).toFixed(2)} EUR`;
-}
-
-function formatDraftPrice(value: string) {
-  const price = Number(value.replace(",", "."));
-  if (!Number.isFinite(price) || price <= 0) {
-    return "Gratis";
-  }
-  return `${price.toFixed(2)} EUR`;
-}
-
-function dateInputFromInstant(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return tomorrowDateParts();
-  }
-  const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, "0");
-  const dd = String(date.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}`;
-}
-
-function timeInputFromInstant(value: string) {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return "19:00";
-  }
-  return `${String(date.getHours()).padStart(2, "0")}:${String(
-    date.getMinutes(),
-  ).padStart(2, "0")}`;
-}
-
-function getRandomMatchCover() {
-  const index = Math.floor(Math.random() * MATCH_COVER_IMAGES.length);
-  return MATCH_COVER_IMAGES[index] ?? DEFAULT_MATCH_COVER;
-}
-
-function getFallbackMatchCover(match: MatchResponse) {
-  const seed = match.id || match.title || match.startsAt;
-  const hash = Array.from(seed).reduce(
-    (sum, character) => sum + character.charCodeAt(0),
-    0,
-  );
-  return MATCH_COVER_IMAGES[hash % MATCH_COVER_IMAGES.length] ?? DEFAULT_MATCH_COVER;
-}
-
-function getMatchCover(match: MatchResponse) {
-  return match.coverImageUrl || getFallbackMatchCover(match);
-}
-
 function MatchImageBackground({
   match,
   style,
@@ -381,14 +301,6 @@ function MatchImageBackground({
       {children}
     </ImageBackground>
   );
-}
-
-function publicHandle(user?: { displayName?: string | null; username?: string | null }) {
-  const username = user?.username?.trim();
-  if (username) {
-    return `@${username}`;
-  }
-  return user?.displayName?.trim() || "Jugador";
 }
 
 export default function App() {
@@ -504,53 +416,6 @@ function AppContent() {
     return matchesText && matchesMine && matchesDate && matchesAvailability;
   });
 }, [matches, myMatches, searchQuery, matchFilter, dateFilter, onlyAvailable]);
-
-
-function filterMatchByDate(
-  match: MatchResponse,
-  filter: DateFilter,
-  now: Date,
-) {
-  const matchDate = new Date(match.startsAt);
-
-  if (filter === "all") {
-    return true;
-  }
-
-  if (filter === "today") {
-    return isSameDay(matchDate, now);
-  }
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-
-  if (filter === "tomorrow") {
-    return isSameDay(matchDate, tomorrow);
-  }
-
-  if (filter === "week") {
-    const end = new Date(now);
-    end.setDate(now.getDate() + 7);
-    return matchDate >= startOfDay(now) && matchDate <= end;
-  }
-
-  return true;
-}
-
-function isSameDay(a: Date, b: Date) {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function startOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
 
 
   const selectedMatch = selectedMatchId
@@ -4857,59 +4722,6 @@ function matchStatusLabel(status: string) {
     default:
       return status;
   }
-}
-
-function isMatchOpen(match: MatchResponse) {
-  return match.status === "OPEN";
-}
-
-function positionLabel(position: PlayerPosition | null | undefined) {
-  switch (position) {
-    case "GOALKEEPER":
-      return "Portero";
-    case "DEFENDER":
-      return "Defensa";
-    case "MIDFIELDER":
-      return "Medio";
-    case "FORWARD":
-      return "Delantero";
-    default:
-      return "Sin posicion";
-  }
-}
-
-function userParticipatesInMatch(match: MatchResponse, userId: string) {
-  return Boolean(
-    match.teams?.teamA.some((player) => player.userId === userId) ||
-    match.teams?.teamB.some((player) => player.userId === userId),
-  );
-}
-
-function isTeamFull(match: MatchResponse, team: TeamSide) {
-  const occupancy = match.occupancy;
-  const max = occupancy?.maxPlayersPerTeam ?? match.maxPlayersPerTeam;
-  const players =
-    team === "A"
-      ? (occupancy?.teamAPlayers ?? 0)
-      : (occupancy?.teamBPlayers ?? 0);
-  return players >= max;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-ES", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("es-ES", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
 }
 
 const styles = StyleSheet.create({

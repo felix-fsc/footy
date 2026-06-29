@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { MatchPlayerResponse, MatchResponse } from "../../types/domain";
+import { publicHandle } from "../../utils/matchUtils";
 
 type TeamRosterProps = {
   match: MatchResponse;
@@ -126,16 +127,6 @@ function TeamBox({
       </Text>
     </View>
   );
-}
-
-function publicHandle(user?: {
-  displayName?: string | null;
-  username?: string | null;
-}) {
-  if (user?.username?.trim()) {
-    return `@${user.username.trim()}`;
-  }
-  return user?.displayName?.trim() || "Jugador";
 }
 
 const styles = StyleSheet.create({
