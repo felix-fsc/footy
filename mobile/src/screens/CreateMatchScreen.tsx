@@ -18,80 +18,83 @@ import { MapPickerIcon, PencilIcon } from "../components/icons/AppIcons";
 import { BottomNav } from "../components/navigation/BottomNav";
 import { Field, QuickChip } from "../components/ui/FormControls";
 import type { MatchResponse, SavedFieldResponse } from "../types/domain";
+import { platformShadow } from "../utils/styleUtils";
 
 type CreateMatchScreenProps = {
-  editingMatchId: string | null;
-  selectedMatch: MatchResponse | null;
-  loading: boolean;
-  title: string;
-  fieldName: string;
-  city: string;
-  date: string;
-  time: string;
-  maxPlayers: string;
-  pricePerPerson: string;
-  latitude: number;
-  longitude: number;
-  selectedSavedFieldId: string | null;
-  savedFields: SavedFieldResponse[];
-  showCalendar: boolean;
-  showPreview: boolean;
-  topInset: number;
-  bottomInset: number;
-  onClose: () => void;
-  onHome: () => void;
-  onCreateTab: () => void;
-  onProfile: () => void;
-  onTitleChange: (value: string) => void;
-  onFieldNameChange: (value: string) => void;
-  onOpenLocationPicker: () => void;
-  onSelectSavedField: (field: SavedFieldResponse | null) => void;
-  onToggleCalendar: () => void;
-  onDateChange: (value: string) => void;
-  onTimeChange: (value: string) => void;
-  onMaxPlayersChange: (value: string) => void;
-  onPricePerPersonChange: (value: string) => void;
-  onOpenPreview: () => void;
-  onClosePreview: () => void;
-  onSubmit: () => void;
+  actions: {
+    onClose: () => void;
+    onClosePreview: () => void;
+    onDateChange: (value: string) => void;
+    onFieldNameChange: (value: string) => void;
+    onMaxPlayersChange: (value: string) => void;
+    onOpenLocationPicker: () => void;
+    onOpenPreview: () => void;
+    onPricePerPersonChange: (value: string) => void;
+    onSelectSavedField: (field: SavedFieldResponse | null) => void;
+    onSubmit: () => void;
+    onTimeChange: (value: string) => void;
+    onTitleChange: (value: string) => void;
+    onToggleCalendar: () => void;
+  };
+  draft: {
+    city: string;
+    date: string;
+    fieldName: string;
+    latitude: number;
+    longitude: number;
+    maxPlayers: string;
+    pricePerPerson: string;
+    selectedSavedFieldId: string | null;
+    time: string;
+    title: string;
+  };
+  editor: {
+    editingMatchId: string | null;
+    loading: boolean;
+    savedFields: SavedFieldResponse[];
+    selectedMatch: MatchResponse | null;
+    showCalendar: boolean;
+    showPreview: boolean;
+  };
+  layout: {
+    bottomInset: number;
+    topInset: number;
+  };
+  navigation: {
+    onCreateTab: () => void;
+    onHome: () => void;
+    onProfile: () => void;
+  };
 };
 
 export function CreateMatchScreen({
-  editingMatchId,
-  selectedMatch,
-  loading,
-  title,
-  fieldName,
-  city,
-  date,
-  time,
-  maxPlayers,
-  pricePerPerson,
-  latitude,
-  longitude,
-  selectedSavedFieldId,
-  savedFields,
-  showCalendar,
-  showPreview,
-  topInset,
-  bottomInset,
-  onClose,
-  onHome,
-  onCreateTab,
-  onProfile,
-  onTitleChange,
-  onFieldNameChange,
-  onOpenLocationPicker,
-  onSelectSavedField,
-  onToggleCalendar,
-  onDateChange,
-  onTimeChange,
-  onMaxPlayersChange,
-  onPricePerPersonChange,
-  onOpenPreview,
-  onClosePreview,
-  onSubmit,
+  actions,
+  draft,
+  editor,
+  layout,
+  navigation,
 }: CreateMatchScreenProps) {
+  const {
+    city,
+    date,
+    fieldName,
+    latitude,
+    longitude,
+    maxPlayers,
+    pricePerPerson,
+    selectedSavedFieldId,
+    time,
+    title,
+  } = draft;
+  const {
+    editingMatchId,
+    loading,
+    savedFields,
+    selectedMatch,
+    showCalendar,
+    showPreview,
+  } = editor;
+
   return (
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
@@ -100,8 +103,8 @@ export function CreateMatchScreen({
         contentContainerStyle={[
           styles.createContent,
           {
-            paddingTop: topInset + 18,
-            paddingBottom: bottomInset + 116,
+            paddingTop: layout.topInset + 18,
+            paddingBottom: layout.bottomInset + 116,
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -121,7 +124,7 @@ export function CreateMatchScreen({
               editingMatchId && styles.editClosePill,
               pressed && styles.closePillPressed,
             ]}
-            onPress={onClose}
+            onPress={actions.onClose}
           >
             <Text style={styles.closePillText}>
               {editingMatchId ? "Volver" : "Cerrar"}
@@ -151,13 +154,13 @@ export function CreateMatchScreen({
           <Field
             label="Titulo"
             value={title}
-            onChangeText={onTitleChange}
+            onChangeText={actions.onTitleChange}
             placeholder="Partido Footy"
           />
           <Field
             label="Campo"
             value={fieldName}
-            onChangeText={onFieldNameChange}
+            onChangeText={actions.onFieldNameChange}
             placeholder="Nombre del campo"
           />
           <View style={styles.locationCreateCard}>
@@ -168,7 +171,10 @@ export function CreateMatchScreen({
                 {latitude.toFixed(5)}, {longitude.toFixed(5)}
               </Text>
             </View>
-            <Pressable style={styles.locationPickButton} onPress={onOpenLocationPicker}>
+            <Pressable
+              style={styles.locationPickButton}
+              onPress={actions.onOpenLocationPicker}
+            >
               <MapPickerIcon />
             </Pressable>
           </View>
@@ -185,7 +191,7 @@ export function CreateMatchScreen({
                     styles.savedFieldChip,
                     !selectedSavedFieldId && styles.savedFieldChipActive,
                   ]}
-                  onPress={() => onSelectSavedField(null)}
+                  onPress={() => actions.onSelectSavedField(null)}
                 >
                   <Text
                     style={[
@@ -206,7 +212,7 @@ export function CreateMatchScreen({
                         styles.savedFieldChip,
                         active && styles.savedFieldChipActive,
                       ]}
-                      onPress={() => onSelectSavedField(field)}
+                      onPress={() => actions.onSelectSavedField(field)}
                     >
                       <Text
                         style={[
@@ -229,7 +235,10 @@ export function CreateMatchScreen({
 
           <View style={styles.calendarBlock}>
             <Text style={styles.fieldLabel}>Fecha</Text>
-            <Pressable style={styles.dateSelectorCard} onPress={onToggleCalendar}>
+            <Pressable
+              style={styles.dateSelectorCard}
+              onPress={actions.onToggleCalendar}
+            >
               <View>
                 <Text style={styles.dateSelectorLabel}>Fecha elegida</Text>
                 <Text style={styles.dateSelectorValue}>{date}</Text>
@@ -239,10 +248,10 @@ export function CreateMatchScreen({
               </Text>
             </Pressable>
             {showCalendar ? (
-              <CalendarPicker value={date} onChange={onDateChange} />
+              <CalendarPicker value={date} onChange={actions.onDateChange} />
             ) : null}
           </View>
-          <TimeWheel value={time} onChange={onTimeChange} />
+          <TimeWheel value={time} onChange={actions.onTimeChange} />
           <View style={styles.choiceBlock}>
             <Text style={styles.fieldLabel}>Jugadores por equipo</Text>
             <View style={styles.quickChipRow}>
@@ -251,7 +260,7 @@ export function CreateMatchScreen({
                   key={players}
                   label={`${players} vs ${players}`}
                   active={maxPlayers === players}
-                  onPress={() => onMaxPlayersChange(players)}
+                  onPress={() => actions.onMaxPlayersChange(players)}
                 />
               ))}
             </View>
@@ -259,13 +268,13 @@ export function CreateMatchScreen({
           <Field
             label="Precio por persona"
             value={pricePerPerson}
-            onChangeText={onPricePerPersonChange}
+            onChangeText={actions.onPricePerPersonChange}
             keyboardType="decimal-pad"
             placeholder="3.50"
           />
           <Pressable
             style={styles.createPreviewButton}
-            onPress={onOpenPreview}
+            onPress={actions.onOpenPreview}
             disabled={loading}
           >
             <Text style={styles.createPreviewButtonText}>
@@ -287,14 +296,14 @@ export function CreateMatchScreen({
         latitude={latitude}
         longitude={longitude}
         editing={Boolean(editingMatchId)}
-        onClose={onClosePreview}
-        onCreate={onSubmit}
+        onClose={actions.onClosePreview}
+        onCreate={actions.onSubmit}
       />
       <BottomNav
         active="create"
-        onHome={onHome}
-        onCreate={onCreateTab}
-        onProfile={onProfile}
+        onHome={navigation.onHome}
+        onCreate={navigation.onCreateTab}
+        onProfile={navigation.onProfile}
       />
     </SafeAreaView>
   );
@@ -372,10 +381,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(227,219,208,0.14)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
+    ...platformShadow({ opacity: 0.22, radius: 20, y: 12 }),
   },
   createCardBubbleOne: {
     position: "absolute",
@@ -499,10 +505,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    ...platformShadow({ opacity: 0.24, radius: 18, y: 10 }),
   },
   createPreviewButtonText: {
     color: "#0A110E",

@@ -88,6 +88,58 @@ export function getMapCenter(
   };
 }
 
+export function getMapCanvasFrame(viewport: { width: number; height: number }) {
+  const width = Math.max(viewport.width + 768, 1200);
+  const height = Math.max(viewport.height + 768, 1200);
+
+  return {
+    width,
+    height,
+    left: (viewport.width - width) / 2,
+    top: (viewport.height - height) / 2,
+  };
+}
+
+export function getWheelZoomDelta({
+  deltaY,
+  lastZoomAt,
+  now,
+  throttleMs = 110,
+}: {
+  deltaY: number;
+  lastZoomAt: number;
+  now: number;
+  throttleMs?: number;
+}) {
+  if (Math.abs(deltaY) < 4 || now - lastZoomAt < throttleMs) {
+    return 0;
+  }
+  return deltaY > 0 ? -1 : 1;
+}
+
+export function getCenterAfterDrag({
+  center,
+  dragOffset,
+  zoom,
+}: {
+  center: MapLocation;
+  dragOffset: MapPoint;
+  zoom: number;
+}) {
+  if (dragOffset.x === 0 && dragOffset.y === 0) {
+    return center;
+  }
+
+  const centerWorld = latLonToWorld(center, zoom);
+  return worldToLatLon(
+    {
+      x: centerWorld.x - dragOffset.x,
+      y: centerWorld.y - dragOffset.y,
+    },
+    zoom,
+  );
+}
+
 export function latLonToWorld(location: MapLocation, zoom: number) {
   const scale = MAP_TILE_SIZE * 2 ** zoom;
   const sinLatitude = Math.sin((location.latitude * Math.PI) / 180);

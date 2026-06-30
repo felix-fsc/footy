@@ -20,53 +20,62 @@ import type { HomeMode, MatchResponse } from "../types/domain";
 const MOBILE_EDGE_PADDING = 10;
 
 type HomeScreenProps = {
-  homeMode: HomeMode;
-  matches: MatchResponse[];
-  myMatches: MatchResponse[];
-  selectedMatch: MatchResponse | null;
-  selectedMatchId: string | null;
-  currentUserId: string | null;
-  searchQuery: string;
-  userCity: string;
-  victoryStreak: number;
-  loading: boolean;
-  topInset: number;
-  onHomeModeChange: (mode: HomeMode) => void;
-  onSearchQueryChange: (value: string) => void;
-  onRefresh: () => void;
-  onSelectMatch: (matchId: string | null) => void;
-  onOpenDetail: (matchId: string) => void;
-  onHome: () => void;
-  onCreate: () => void;
-  onProfile: () => void;
+  actions: {
+    onHomeModeChange: (mode: HomeMode) => void;
+    onOpenDetail: (matchId: string) => void;
+    onRefresh: () => void;
+    onSearchQueryChange: (value: string) => void;
+    onSelectMatch: (matchId: string | null) => void;
+  };
+  data: {
+    currentUserId: string | null;
+    loading: boolean;
+    matches: MatchResponse[];
+    myMatches: MatchResponse[];
+    searchQuery: string;
+    selectedMatch: MatchResponse | null;
+    selectedMatchId: string | null;
+    userCity: string;
+    victoryStreak: number;
+  };
+  layout: {
+    topInset: number;
+  };
+  navigation: {
+    onCreate: () => void;
+    onHome: () => void;
+    onProfile: () => void;
+  };
+  view: {
+    homeMode: HomeMode;
+  };
 };
 
 export function HomeScreen({
-  homeMode,
-  matches,
-  myMatches,
-  selectedMatch,
-  selectedMatchId,
-  currentUserId,
-  searchQuery,
-  userCity,
-  victoryStreak,
-  loading,
-  topInset,
-  onHomeModeChange,
-  onSearchQueryChange,
-  onRefresh,
-  onSelectMatch,
-  onOpenDetail,
-  onHome,
-  onCreate,
-  onProfile,
+  actions,
+  data,
+  layout,
+  navigation,
+  view,
 }: HomeScreenProps) {
+  const {
+    currentUserId,
+    loading,
+    matches,
+    myMatches,
+    searchQuery,
+    selectedMatch,
+    selectedMatchId,
+    userCity,
+    victoryStreak,
+  } = data;
+  const { homeMode } = view;
+
   return (
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
       <ScreenBubbles />
-      <View style={[styles.homeShell, { paddingTop: topInset }]}>
+      <View style={[styles.homeShell, { paddingTop: layout.topInset }]}>
         <View style={styles.homeContent}>
           <View style={styles.homeHeader}>
             <View style={styles.homeHeroBanner}>
@@ -99,7 +108,7 @@ export function HomeScreen({
               <TextInput
                 style={styles.homeSearchInput}
                 value={searchQuery}
-                onChangeText={onSearchQueryChange}
+                onChangeText={actions.onSearchQueryChange}
                 placeholder="Buscar partido o ciudad"
                 placeholderTextColor="rgba(227,219,208,0.62)"
               />
@@ -111,17 +120,17 @@ export function HomeScreen({
               <ModeButton
                 label="Mapa"
                 active={homeMode === "map"}
-                onPress={() => onHomeModeChange("map")}
+                onPress={() => actions.onHomeModeChange("map")}
               />
               <ModeButton
                 label="Lista"
                 active={homeMode === "list"}
-                onPress={() => onHomeModeChange("list")}
+                onPress={() => actions.onHomeModeChange("list")}
               />
             </View>
             <Pressable
               style={styles.refreshMiniButton}
-              onPress={onRefresh}
+              onPress={actions.onRefresh}
               disabled={loading}
             >
               {loading ? (
@@ -140,9 +149,9 @@ export function HomeScreen({
                 selectedMatchId={selectedMatchId}
                 searchQuery={searchQuery}
                 userCity={userCity}
-                onSelect={onSelectMatch}
-                onClearSelection={() => onSelectMatch(null)}
-                onOpenDetail={onOpenDetail}
+                onSelect={actions.onSelectMatch}
+                onClearSelection={() => actions.onSelectMatch(null)}
+                onOpenDetail={actions.onOpenDetail}
                 loading={loading}
               />
             ) : (
@@ -151,8 +160,8 @@ export function HomeScreen({
                 myMatches={myMatches}
                 currentUserId={currentUserId}
                 selectedMatchId={selectedMatchId}
-                onSelect={onSelectMatch}
-                onOpenDetail={onOpenDetail}
+                onSelect={actions.onSelectMatch}
+                onOpenDetail={actions.onOpenDetail}
                 loading={loading}
               />
             )}
@@ -161,9 +170,9 @@ export function HomeScreen({
       </View>
       <BottomNav
         active="home"
-        onHome={onHome}
-        onCreate={onCreate}
-        onProfile={onProfile}
+        onHome={navigation.onHome}
+        onCreate={navigation.onCreate}
+        onProfile={navigation.onProfile}
       />
     </SafeAreaView>
   );

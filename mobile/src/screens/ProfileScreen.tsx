@@ -24,96 +24,86 @@ import type {
 import { formatDate, positionLabel, publicHandle } from "../utils/matchUtils";
 
 type ProfileScreenProps = {
-  profile: PlayerProfileResponse | null;
-  userName: string | null;
-  isAdmin: boolean;
-  loading: boolean;
-  profileEditing: boolean;
-  profileUsername: string;
-  profileFullName: string;
-  profileCity: string;
-  profilePosition: PlayerPosition;
-  profileBio: string;
-  victoryStreak: number;
-  myMatches: MatchResponse[];
-  nextMyMatch: MatchResponse | null;
-  savedFields: SavedFieldResponse[];
-  adminFieldEditingId: string | null;
-  adminFieldName: string;
-  adminFieldAddress: string;
-  adminFieldCity: string;
-  adminFieldLatitude: string;
-  adminFieldLongitude: string;
-  topInset: number;
-  bottomInset: number;
-  onHome: () => void;
-  onCreate: () => void;
-  onProfile: () => void;
-  onLogout: () => void;
-  onToggleProfileEditing: () => void;
-  onProfileUsernameChange: (value: string) => void;
-  onProfileFullNameChange: (value: string) => void;
-  onProfileCityChange: (value: string) => void;
-  onProfilePositionChange: (value: PlayerPosition) => void;
-  onProfileBioChange: (value: string) => void;
-  onSaveProfile: () => void;
-  onStartAdminFieldCreate: () => void;
-  onStartAdminFieldEdit: (field: SavedFieldResponse) => void;
-  onSaveAdminField: () => void;
-  onDeleteAdminField: (field: SavedFieldResponse) => void;
-  onAdminFieldNameChange: (value: string) => void;
-  onAdminFieldAddressChange: (value: string) => void;
-  onAdminFieldCityChange: (value: string) => void;
-  onAdminFieldLatitudeChange: (value: string) => void;
-  onAdminFieldLongitudeChange: (value: string) => void;
-  onOpenMatch: (matchId: string) => void;
+  admin: {
+    address: string;
+    city: string;
+    editingId: string | null;
+    isAdmin: boolean;
+    latitude: string;
+    longitude: string;
+    name: string;
+    savedFields: SavedFieldResponse[];
+  };
+  adminActions: {
+    onAddressChange: (value: string) => void;
+    onCityChange: (value: string) => void;
+    onDeleteField: (field: SavedFieldResponse) => void;
+    onLatitudeChange: (value: string) => void;
+    onLongitudeChange: (value: string) => void;
+    onNameChange: (value: string) => void;
+    onSaveField: () => void;
+    onStartFieldCreate: () => void;
+    onStartFieldEdit: (field: SavedFieldResponse) => void;
+  };
+  layout: {
+    bottomInset: number;
+    topInset: number;
+  };
+  navigation: {
+    onCreate: () => void;
+    onHome: () => void;
+    onOpenMatch: (matchId: string) => void;
+    onProfile: () => void;
+  };
+  profileData: {
+    bio: string;
+    city: string;
+    editing: boolean;
+    fullName: string;
+    loading: boolean;
+    myMatches: MatchResponse[];
+    nextMyMatch: MatchResponse | null;
+    position: PlayerPosition;
+    profile: PlayerProfileResponse | null;
+    userName: string | null;
+    username: string;
+    victoryStreak: number;
+  };
+  profileActions: {
+    onBioChange: (value: string) => void;
+    onCityChange: (value: string) => void;
+    onFullNameChange: (value: string) => void;
+    onLogout: () => void;
+    onPositionChange: (value: PlayerPosition) => void;
+    onSaveProfile: () => void;
+    onToggleEditing: () => void;
+    onUsernameChange: (value: string) => void;
+  };
 };
 
 export function ProfileScreen({
-  profile,
-  userName,
-  isAdmin,
-  loading,
-  profileEditing,
-  profileUsername,
-  profileFullName,
-  profileCity,
-  profilePosition,
-  profileBio,
-  victoryStreak,
-  myMatches,
-  nextMyMatch,
-  savedFields,
-  adminFieldEditingId,
-  adminFieldName,
-  adminFieldAddress,
-  adminFieldCity,
-  adminFieldLatitude,
-  adminFieldLongitude,
-  topInset,
-  bottomInset,
-  onHome,
-  onCreate,
-  onProfile,
-  onLogout,
-  onToggleProfileEditing,
-  onProfileUsernameChange,
-  onProfileFullNameChange,
-  onProfileCityChange,
-  onProfilePositionChange,
-  onProfileBioChange,
-  onSaveProfile,
-  onStartAdminFieldCreate,
-  onStartAdminFieldEdit,
-  onSaveAdminField,
-  onDeleteAdminField,
-  onAdminFieldNameChange,
-  onAdminFieldAddressChange,
-  onAdminFieldCityChange,
-  onAdminFieldLatitudeChange,
-  onAdminFieldLongitudeChange,
-  onOpenMatch,
+  admin,
+  adminActions,
+  layout,
+  navigation,
+  profileActions,
+  profileData,
 }: ProfileScreenProps) {
+  const {
+    bio: profileBio,
+    city: profileCity,
+    editing: profileEditing,
+    fullName: profileFullName,
+    loading,
+    myMatches,
+    nextMyMatch,
+    position: profilePosition,
+    profile,
+    userName,
+    username: profileUsername,
+    victoryStreak,
+  } = profileData;
+
   return (
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
@@ -122,17 +112,17 @@ export function ProfileScreen({
         contentContainerStyle={[
           styles.profileContent,
           {
-            paddingTop: topInset + 18,
-            paddingBottom: bottomInset + 104,
+            paddingTop: layout.topInset + 18,
+            paddingBottom: layout.bottomInset + 104,
           },
         ]}
       >
         <View style={styles.profileHeader}>
-          <Pressable style={styles.backButton} onPress={onHome}>
+          <Pressable style={styles.backButton} onPress={navigation.onHome}>
             <Text style={styles.backButtonText}>{"<"}</Text>
           </Pressable>
           <Text style={styles.profileTitle}>Perfil</Text>
-          <Pressable style={styles.logoutPill} onPress={onLogout}>
+          <Pressable style={styles.logoutPill} onPress={profileActions.onLogout}>
             <Text style={styles.logoutText}>Salir</Text>
           </Pressable>
         </View>
@@ -141,11 +131,11 @@ export function ProfileScreen({
           <View style={styles.profileGlowMark} />
           <View style={styles.profileHeroTopline}>
             <Text style={styles.profileEyebrow}>
-              {isAdmin ? "Administrador" : "Jugador"}
+              {admin.isAdmin ? "Administrador" : "Jugador"}
             </Text>
             <Pressable
               style={styles.editProfileButton}
-              onPress={onToggleProfileEditing}
+              onPress={profileActions.onToggleEditing}
             >
               <EditProfileIcon active={profileEditing} />
             </Pressable>
@@ -185,60 +175,63 @@ export function ProfileScreen({
           </View>
         </View>
 
-        {isAdmin ? (
+        {admin.isAdmin ? (
           <View style={styles.adminPanel}>
             <View style={styles.adminPanelHeader}>
               <View>
                 <Text style={styles.adminEyebrow}>Admin</Text>
                 <Text style={styles.adminTitle}>Pistas guardadas</Text>
               </View>
-              <Pressable style={styles.adminMiniButton} onPress={onStartAdminFieldCreate}>
+              <Pressable
+                style={styles.adminMiniButton}
+                onPress={adminActions.onStartFieldCreate}
+              >
                 <Text style={styles.adminMiniButtonText}>Nueva</Text>
               </Pressable>
             </View>
             <Field
               label="Nombre de pista"
-              value={adminFieldName}
-              onChangeText={onAdminFieldNameChange}
+              value={admin.name}
+              onChangeText={adminActions.onNameChange}
               placeholder="Campo Municipal"
             />
             <Field
               label="Direccion"
-              value={adminFieldAddress}
-              onChangeText={onAdminFieldAddressChange}
+              value={admin.address}
+              onChangeText={adminActions.onAddressChange}
               placeholder="Calle, barrio..."
             />
             <Field
               label="Ciudad"
-              value={adminFieldCity}
-              onChangeText={onAdminFieldCityChange}
+              value={admin.city}
+              onChangeText={adminActions.onCityChange}
               placeholder="Huelva"
             />
             <Field
               label="Latitud"
-              value={adminFieldLatitude}
-              onChangeText={onAdminFieldLatitudeChange}
+              value={admin.latitude}
+              onChangeText={adminActions.onLatitudeChange}
               keyboardType="decimal-pad"
               placeholder="37.261420"
             />
             <Field
               label="Longitud"
-              value={adminFieldLongitude}
-              onChangeText={onAdminFieldLongitudeChange}
+              value={admin.longitude}
+              onChangeText={adminActions.onLongitudeChange}
               keyboardType="decimal-pad"
               placeholder="-6.944720"
             />
             <Pressable
               style={styles.adminSaveButton}
-              onPress={onSaveAdminField}
+              onPress={adminActions.onSaveField}
               disabled={loading}
             >
               <Text style={styles.adminSaveButtonText}>
-                {adminFieldEditingId ? "Guardar pista" : "Anadir pista"}
+                {admin.editingId ? "Guardar pista" : "Anadir pista"}
               </Text>
             </Pressable>
             <View style={styles.adminFieldList}>
-              {savedFields.map((field) => (
+              {admin.savedFields.map((field) => (
                 <View key={field.id} style={styles.adminFieldItem}>
                   <View style={styles.adminFieldInfo}>
                     <Text style={styles.adminFieldName}>{field.name}</Text>
@@ -248,13 +241,13 @@ export function ProfileScreen({
                   </View>
                   <Pressable
                     style={styles.adminIconButton}
-                    onPress={() => onStartAdminFieldEdit(field)}
+                    onPress={() => adminActions.onStartFieldEdit(field)}
                   >
                     <Text style={styles.adminIconButtonText}>Editar</Text>
                   </Pressable>
                   <Pressable
                     style={[styles.adminIconButton, styles.adminDangerButton]}
-                    onPress={() => onDeleteAdminField(field)}
+                    onPress={() => adminActions.onDeleteField(field)}
                   >
                     <Text style={styles.adminIconButtonText}>Borrar</Text>
                   </Pressable>
@@ -270,20 +263,20 @@ export function ProfileScreen({
             <Field
               label="Usuario"
               value={profileUsername}
-              onChangeText={onProfileUsernameChange}
+              onChangeText={profileActions.onUsernameChange}
               placeholder="tu_usuario"
               autoCapitalize="none"
             />
             <Field
               label="Nombre completo"
               value={profileFullName}
-              onChangeText={onProfileFullNameChange}
+              onChangeText={profileActions.onFullNameChange}
               placeholder="Tu nombre"
             />
             <Field
               label="Ciudad"
               value={profileCity}
-              onChangeText={onProfileCityChange}
+              onChangeText={profileActions.onCityChange}
               placeholder="Huelva"
             />
             <View style={styles.positionGrid}>
@@ -291,37 +284,37 @@ export function ProfileScreen({
                 label="POR"
                 value="GOALKEEPER"
                 active={profilePosition === "GOALKEEPER"}
-                onPress={onProfilePositionChange}
+                onPress={profileActions.onPositionChange}
               />
               <PositionButton
                 label="DEF"
                 value="DEFENDER"
                 active={profilePosition === "DEFENDER"}
-                onPress={onProfilePositionChange}
+                onPress={profileActions.onPositionChange}
               />
               <PositionButton
                 label="MED"
                 value="MIDFIELDER"
                 active={profilePosition === "MIDFIELDER"}
-                onPress={onProfilePositionChange}
+                onPress={profileActions.onPositionChange}
               />
               <PositionButton
                 label="DEL"
                 value="FORWARD"
                 active={profilePosition === "FORWARD"}
-                onPress={onProfilePositionChange}
+                onPress={profileActions.onPositionChange}
               />
             </View>
             <Field
               label="Bio"
               value={profileBio}
-              onChangeText={onProfileBioChange}
+              onChangeText={profileActions.onBioChange}
               placeholder="Como juegas, disponibilidad, pierna buena..."
               multiline
             />
             <Pressable
               style={styles.authButton}
-              onPress={onSaveProfile}
+              onPress={profileActions.onSaveProfile}
               disabled={loading}
             >
               {loading ? (
@@ -342,7 +335,7 @@ export function ProfileScreen({
         <View style={styles.nextMatchCard}>
           <Text style={styles.nextMatchEyebrow}>Proximo partido</Text>
           {nextMyMatch ? (
-            <Pressable onPress={() => onOpenMatch(nextMyMatch.id)}>
+            <Pressable onPress={() => navigation.onOpenMatch(nextMyMatch.id)}>
               <Text style={styles.nextMatchTitle}>{nextMyMatch.title}</Text>
               <Text style={styles.nextMatchMeta}>
                 {formatDate(nextMyMatch.startsAt)} -{" "}
@@ -365,7 +358,7 @@ export function ProfileScreen({
               <CompactMatch
                 key={match.id}
                 match={match}
-                onPress={() => onOpenMatch(match.id)}
+                onPress={() => navigation.onOpenMatch(match.id)}
               />
             ))
           )}
@@ -373,9 +366,9 @@ export function ProfileScreen({
       </ScrollView>
       <BottomNav
         active="profile"
-        onHome={onHome}
-        onCreate={onCreate}
-        onProfile={onProfile}
+        onHome={navigation.onHome}
+        onCreate={navigation.onCreate}
+        onProfile={navigation.onProfile}
       />
     </SafeAreaView>
   );

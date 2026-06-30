@@ -8,10 +8,10 @@ const INTRO_VIDEO = require("../../../assets/intro.mp4");
 
 export function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
   const finished = useRef(false);
+  const mounted = useRef(true);
   const player = useVideoPlayer(INTRO_VIDEO, (nextPlayer) => {
     nextPlayer.loop = false;
     nextPlayer.muted = true;
-    nextPlayer.play();
   });
 
   const finish = useCallback(() => {
@@ -22,24 +22,35 @@ export function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
     onDone();
   }, [onDone]);
 
+  const playSafely = useCallback(() => {
+    if (finished.current || !mounted.current) {
+      return;
+    }
+
+    try {
+      void Promise.resolve(player.play()).catch(() => undefined);
+    } catch {
+      // The browser can reject play() while the intro is being removed.
+    }
+  }, [player]);
+
   useEventListener(player, "playToEnd", finish);
   useEventListener(player, "statusChange", ({ status }) => {
     if (status === "error") {
       finish();
     }
     if (Platform.OS === "web" && status === "readyToPlay") {
-      player.play();
+      playSafely();
     }
   });
 
   useEffect(() => {
-    if (Platform.OS !== "web") {
-      return;
-    }
-
-    const playTimer = setTimeout(() => player.play(), 0);
-    return () => clearTimeout(playTimer);
-  }, [player]);
+    const playTimer = setTimeout(playSafely, 0);
+    return () => {
+      clearTimeout(playTimer);
+      mounted.current = false;
+    };
+  }, [playSafely]);
 
   useEffect(() => {
     const fallback = setTimeout(finish, 6500);

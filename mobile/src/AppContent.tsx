@@ -15,6 +15,7 @@ import { useMatchEditorActions } from "./hooks/useMatchEditorActions";
 import { useMatches } from "./hooks/useMatches";
 import { useProfile } from "./hooks/useProfile";
 import { useProfileActions } from "./hooks/useProfileActions";
+import { useAppViewActions } from "./hooks/useAppViewActions";
 import { openMatchDirections } from "./platform/directions";
 import { AuthScreen } from "./screens/AuthScreen";
 import { CreateMatchScreen } from "./screens/CreateMatchScreen";
@@ -114,6 +115,13 @@ export function AppContent() {
     request,
     setLoading,
   });
+  const viewActions = useAppViewActions({
+    matchDraft,
+    matchDraftCity,
+    matchesState,
+    profileState,
+    setShowIntroVideo,
+  });
 
   useAppLifecycle({
     adminFields,
@@ -136,19 +144,19 @@ export function AppContent() {
     showCalendar: matchDraft.showCalendar,
     profileEditing: profileState.editing,
     editingMatchId: matchDraft.editingMatchId,
-    onClosePublicProfile: () => profileState.setShowPublicProfile(false),
+    onClosePublicProfile: viewActions.closePublicProfile,
     onCloseChat: matchActions.closeChat,
-    onClosePreview: () => matchDraft.setShowPreview(false),
-    onCloseCalendar: () => matchDraft.setShowCalendar(false),
+    onClosePreview: viewActions.closePreview,
+    onCloseCalendar: viewActions.closeCalendar,
     onStopProfileEditing: profileState.stopEditing,
-    onClearSelectedMatch: () => matchesState.setSelectedMatchId(null),
+    onClearSelectedMatch: viewActions.clearSelectedMatch,
     onBackToCreate: navigation.backToCreate,
     onCloseMatchEditor: navigation.closeMatchEditor,
     onHome: navigation.goHome,
   });
 
   if (showIntroVideo) {
-    return <IntroVideoOverlay onDone={() => setShowIntroVideo(false)} />;
+    return <IntroVideoOverlay onDone={viewActions.finishIntroVideo} />;
   }
 
   if (restoringSession) {
@@ -178,49 +186,61 @@ export function AppContent() {
   if (navigation.appTab === "profile") {
     return (
       <ProfileScreen
-        profile={profileState.profile}
-        userName={userName}
-        isAdmin={isAdmin}
-        loading={loading}
-        profileEditing={profileState.editing}
-        profileUsername={profileState.username}
-        profileFullName={profileState.fullName}
-        profileCity={profileState.city}
-        profilePosition={profileState.position}
-        profileBio={profileState.bio}
-        victoryStreak={matchesState.victoryStreak}
-        myMatches={matchesState.myMatches}
-        nextMyMatch={matchesState.nextMyMatch}
-        savedFields={adminFields.savedFields}
-        adminFieldEditingId={adminFields.editingId}
-        adminFieldName={adminFields.name}
-        adminFieldAddress={adminFields.address}
-        adminFieldCity={adminFields.city}
-        adminFieldLatitude={adminFields.latitude}
-        adminFieldLongitude={adminFields.longitude}
-        topInset={safeInsets.top}
-        bottomInset={safeInsets.bottom}
-        onHome={navigation.goHome}
-        onCreate={navigation.startMatchCreate}
-        onProfile={navigation.openProfile}
-        onLogout={authActions.logout}
-        onToggleProfileEditing={profileState.toggleEditing}
-        onProfileUsernameChange={profileState.setUsername}
-        onProfileFullNameChange={profileState.setFullName}
-        onProfileCityChange={profileState.setCity}
-        onProfilePositionChange={profileState.setPosition}
-        onProfileBioChange={profileState.setBio}
-        onSaveProfile={profileActions.saveProfile}
-        onStartAdminFieldCreate={adminFields.startCreate}
-        onStartAdminFieldEdit={adminFields.startEdit}
-        onSaveAdminField={adminFields.save}
-        onDeleteAdminField={adminFields.remove}
-        onAdminFieldNameChange={adminFields.setName}
-        onAdminFieldAddressChange={adminFields.setAddress}
-        onAdminFieldCityChange={adminFields.setCity}
-        onAdminFieldLatitudeChange={adminFields.setLatitude}
-        onAdminFieldLongitudeChange={adminFields.setLongitude}
-        onOpenMatch={navigation.openDetail}
+        admin={{
+          address: adminFields.address,
+          city: adminFields.city,
+          editingId: adminFields.editingId,
+          isAdmin,
+          latitude: adminFields.latitude,
+          longitude: adminFields.longitude,
+          name: adminFields.name,
+          savedFields: adminFields.savedFields,
+        }}
+        adminActions={{
+          onAddressChange: adminFields.setAddress,
+          onCityChange: adminFields.setCity,
+          onDeleteField: adminFields.remove,
+          onLatitudeChange: adminFields.setLatitude,
+          onLongitudeChange: adminFields.setLongitude,
+          onNameChange: adminFields.setName,
+          onSaveField: adminFields.save,
+          onStartFieldCreate: adminFields.startCreate,
+          onStartFieldEdit: adminFields.startEdit,
+        }}
+        layout={{
+          bottomInset: safeInsets.bottom,
+          topInset: safeInsets.top,
+        }}
+        navigation={{
+          onCreate: navigation.startMatchCreate,
+          onHome: navigation.goHome,
+          onOpenMatch: navigation.openDetail,
+          onProfile: navigation.openProfile,
+        }}
+        profileActions={{
+          onBioChange: profileState.setBio,
+          onCityChange: profileState.setCity,
+          onFullNameChange: profileState.setFullName,
+          onLogout: authActions.logout,
+          onPositionChange: profileState.setPosition,
+          onSaveProfile: profileActions.saveProfile,
+          onToggleEditing: profileState.toggleEditing,
+          onUsernameChange: profileState.setUsername,
+        }}
+        profileData={{
+          bio: profileState.bio,
+          city: profileState.city,
+          editing: profileState.editing,
+          fullName: profileState.fullName,
+          loading,
+          myMatches: matchesState.myMatches,
+          nextMyMatch: matchesState.nextMyMatch,
+          position: profileState.position,
+          profile: profileState.profile,
+          userName,
+          username: profileState.username,
+          victoryStreak: matchesState.victoryStreak,
+        }}
       />
     );
   }
@@ -235,53 +255,59 @@ export function AppContent() {
         bottomInset={safeInsets.bottom}
         onBack={navigation.backToCreate}
         onUseLocation={navigation.backToCreate}
-        onLocationChange={(location, address) => {
-          matchDraft.applyLocation(location, address, matchDraftCity);
-        }}
+        onLocationChange={viewActions.applyLocationToDraft}
       />
     );
   }
   if (navigation.appTab === "create") {
     return (
       <CreateMatchScreen
-        editingMatchId={matchDraft.editingMatchId}
-        selectedMatch={matchesState.selectedMatch}
-        loading={loading}
-        title={matchDraft.title}
-        fieldName={matchDraft.fieldName}
-        city={matchDraft.city}
-        date={matchDraft.date}
-        time={matchDraft.time}
-        maxPlayers={matchDraft.maxPlayers}
-        pricePerPerson={matchDraft.pricePerPerson}
-        latitude={matchDraft.latitude}
-        longitude={matchDraft.longitude}
-        selectedSavedFieldId={matchDraft.selectedSavedFieldId}
-        savedFields={adminFields.savedFields}
-        showCalendar={matchDraft.showCalendar}
-        showPreview={matchDraft.showPreview}
-        topInset={safeInsets.top}
-        bottomInset={safeInsets.bottom}
-        onClose={
-          matchDraft.editingMatchId
+        actions={{
+          onClose: matchDraft.editingMatchId
             ? navigation.closeMatchEditor
-            : navigation.goHome
-        }
-        onHome={navigation.goHome}
-        onCreateTab={navigation.startMatchCreate}
-        onProfile={navigation.openProfile}
-        onTitleChange={matchDraft.setTitle}
-        onFieldNameChange={matchDraft.setFieldName}
-        onOpenLocationPicker={navigation.openLocationPicker}
-        onSelectSavedField={matchDraft.selectSavedField}
-        onToggleCalendar={matchDraft.toggleCalendar}
-        onDateChange={matchDraft.setDate}
-        onTimeChange={matchDraft.setTime}
-        onMaxPlayersChange={matchDraft.setMaxPlayers}
-        onPricePerPersonChange={matchDraft.setPricePerPerson}
-        onOpenPreview={matchEditorActions.openCreatePreview}
-        onClosePreview={() => matchDraft.setShowPreview(false)}
-        onSubmit={matchEditorActions.createMatch}
+            : navigation.goHome,
+          onClosePreview: viewActions.closePreview,
+          onDateChange: matchDraft.setDate,
+          onFieldNameChange: matchDraft.setFieldName,
+          onMaxPlayersChange: matchDraft.setMaxPlayers,
+          onOpenLocationPicker: navigation.openLocationPicker,
+          onOpenPreview: matchEditorActions.openCreatePreview,
+          onPricePerPersonChange: matchDraft.setPricePerPerson,
+          onSelectSavedField: matchDraft.selectSavedField,
+          onSubmit: matchEditorActions.createMatch,
+          onTimeChange: matchDraft.setTime,
+          onTitleChange: matchDraft.setTitle,
+          onToggleCalendar: matchDraft.toggleCalendar,
+        }}
+        draft={{
+          city: matchDraft.city,
+          date: matchDraft.date,
+          fieldName: matchDraft.fieldName,
+          latitude: matchDraft.latitude,
+          longitude: matchDraft.longitude,
+          maxPlayers: matchDraft.maxPlayers,
+          pricePerPerson: matchDraft.pricePerPerson,
+          selectedSavedFieldId: matchDraft.selectedSavedFieldId,
+          time: matchDraft.time,
+          title: matchDraft.title,
+        }}
+        editor={{
+          editingMatchId: matchDraft.editingMatchId,
+          loading,
+          savedFields: adminFields.savedFields,
+          selectedMatch: matchesState.selectedMatch,
+          showCalendar: matchDraft.showCalendar,
+          showPreview: matchDraft.showPreview,
+        }}
+        layout={{
+          bottomInset: safeInsets.bottom,
+          topInset: safeInsets.top,
+        }}
+        navigation={{
+          onCreateTab: navigation.startMatchCreate,
+          onHome: navigation.goHome,
+          onProfile: navigation.openProfile,
+        }}
       />
     );
   }
@@ -289,62 +315,84 @@ export function AppContent() {
   if (navigation.appTab === "detail") {
     return (
       <MatchDetailScreen
-        match={matchesState.selectedMatch}
-        isAdmin={isAdmin}
-        loading={loading}
-        selectedIsParticipant={selectedMatchViewerState.isParticipant}
-        selectedIsOwner={selectedMatchViewerState.isOwner}
-        selectedIsOpen={selectedMatchViewerState.isOpen}
-        messages={matchActions.messages}
-        messageText={matchActions.messageText}
-        showMatchChat={matchActions.showMatchChat}
-        showPublicProfile={profileState.showPublicProfile}
-        publicProfile={profileState.publicProfile}
-        topInset={safeInsets.top}
-        bottomInset={safeInsets.bottom}
-        onHome={navigation.goHome}
-        onCreate={navigation.startMatchCreate}
-        onProfile={navigation.openProfile}
-        onEditMatch={navigation.startMatchEdit}
-        onCancelMatch={matchActions.cancelMatch}
-        onDeleteMatch={matchActions.deleteMatch}
-        onRemovePlayer={matchActions.removeMatchPlayer}
-        onLeaveMatch={matchActions.leaveMatch}
-        onJoinMatch={matchActions.joinMatch}
-        onOpenDirections={openMatchDirections}
-        onOpenProfile={profileActions.openPublicProfile}
-        onOpenChat={matchActions.openChat}
-        onCloseChat={matchActions.closeChat}
-        onRefreshMessages={matchActions.loadMessages}
-        onMessageTextChange={matchActions.setMessageText}
-        onSendMessage={matchActions.sendMessage}
-        onQuickMessage={matchActions.sendMatchMessage}
-        onClosePublicProfile={() => profileState.setShowPublicProfile(false)}
+        actions={{
+          onCancelMatch: matchActions.cancelMatch,
+          onDeleteMatch: matchActions.deleteMatch,
+          onEditMatch: navigation.startMatchEdit,
+          onJoinMatch: matchActions.joinMatch,
+          onLeaveMatch: matchActions.leaveMatch,
+          onOpenDirections: openMatchDirections,
+          onOpenProfile: profileActions.openPublicProfile,
+          onRemovePlayer: matchActions.removeMatchPlayer,
+        }}
+        chat={{
+          messageText: matchActions.messageText,
+          messages: matchActions.messages,
+          onCloseChat: matchActions.closeChat,
+          onMessageTextChange: matchActions.setMessageText,
+          onOpenChat: matchActions.openChat,
+          onQuickMessage: matchActions.sendMatchMessage,
+          onRefreshMessages: matchActions.loadMessages,
+          onSendMessage: matchActions.sendMessage,
+          showMatchChat: matchActions.showMatchChat,
+        }}
+        layout={{
+          bottomInset: safeInsets.bottom,
+          topInset: safeInsets.top,
+        }}
+        navigation={{
+          onCreate: navigation.startMatchCreate,
+          onHome: navigation.goHome,
+          onProfile: navigation.openProfile,
+        }}
+        publicProfileState={{
+          onClosePublicProfile: viewActions.closePublicProfile,
+          publicProfile: profileState.publicProfile,
+          showPublicProfile: profileState.showPublicProfile,
+        }}
+        state={{
+          isAdmin,
+          loading,
+          match: matchesState.selectedMatch,
+          selectedIsOpen: selectedMatchViewerState.isOpen,
+          selectedIsOwner: selectedMatchViewerState.isOwner,
+          selectedIsParticipant: selectedMatchViewerState.isParticipant,
+        }}
       />
     );
   }
 
   return (
     <HomeScreen
-      homeMode={navigation.homeMode}
-      matches={matchesState.visibleMatches}
-      myMatches={matchesState.myMatches}
-      selectedMatch={matchesState.selectedMatch}
-      selectedMatchId={matchesState.selectedMatchId}
-      currentUserId={currentUserId}
-      searchQuery={matchesState.searchQuery}
-      userCity={userCity}
-      victoryStreak={matchesState.victoryStreak}
-      loading={loading}
-      topInset={safeInsets.top}
-      onHomeModeChange={navigation.setHomeMode}
-      onSearchQueryChange={matchesState.setSearchQuery}
-      onRefresh={homeActions.refreshMatches}
-      onSelectMatch={matchesState.setSelectedMatchId}
-      onOpenDetail={navigation.openDetail}
-      onHome={navigation.goHome}
-      onCreate={navigation.startMatchCreate}
-      onProfile={navigation.openProfile}
+      actions={{
+        onHomeModeChange: navigation.setHomeMode,
+        onOpenDetail: navigation.openDetail,
+        onRefresh: homeActions.refreshMatches,
+        onSearchQueryChange: matchesState.setSearchQuery,
+        onSelectMatch: matchesState.setSelectedMatchId,
+      }}
+      data={{
+        currentUserId,
+        loading,
+        matches: matchesState.visibleMatches,
+        myMatches: matchesState.myMatches,
+        searchQuery: matchesState.searchQuery,
+        selectedMatch: matchesState.selectedMatch,
+        selectedMatchId: matchesState.selectedMatchId,
+        userCity,
+        victoryStreak: matchesState.victoryStreak,
+      }}
+      layout={{
+        topInset: safeInsets.top,
+      }}
+      navigation={{
+        onCreate: navigation.startMatchCreate,
+        onHome: navigation.goHome,
+        onProfile: navigation.openProfile,
+      }}
+      view={{
+        homeMode: navigation.homeMode,
+      }}
     />
   );
 }

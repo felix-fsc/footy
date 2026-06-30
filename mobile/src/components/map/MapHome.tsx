@@ -17,14 +17,16 @@ import {
   MAP_TILE_SIZE,
   clampMapZoom,
   getCityMapCenter,
+  getCenterAfterDrag,
+  getMapCanvasFrame,
   getMapCenter,
   getMatchLocation,
   getTouchDistance,
   getVisibleTiles,
-  latLonToWorld,
   projectLocation,
-  worldToLatLon,
+  getWheelZoomDelta,
 } from "../../utils/mapUtils";
+import { platformShadow } from "../../utils/styleUtils";
 import { LocationTargetIcon } from "../icons/AppIcons";
 import { SelectedPopup } from "./SelectedPopup";
 
@@ -106,13 +108,10 @@ export function MapHome({
     latestDragOffset.current = dragOffset;
   }, [dragOffset]);
 
-  const canvasWidth = Math.max(viewport.width + 768, 1200);
-  const canvasHeight = Math.max(viewport.height + 768, 1200);
-  const canvasLeft = (viewport.width - canvasWidth) / 2;
-  const canvasTop = (viewport.height - canvasHeight) / 2;
+  const canvas = getMapCanvasFrame(viewport);
   const mapData = useMemo(
-    () => getVisibleTiles(mapCenter, zoom, canvasWidth, canvasHeight),
-    [canvasHeight, canvasWidth, mapCenter, zoom],
+    () => getVisibleTiles(mapCenter, zoom, canvas.width, canvas.height),
+    [canvas.height, canvas.width, mapCenter, zoom],
   );
 
   const fieldGroups = useMemo(() => {
@@ -184,23 +183,20 @@ export function MapHome({
     if (nextOffset.x === 0 && nextOffset.y === 0) {
       return;
     }
-    const centerWorld = latLonToWorld(mapCenter, zoom);
     setMapCenter(
-      worldToLatLon(
-        {
-          x: centerWorld.x - nextOffset.x,
-          y: centerWorld.y - nextOffset.y,
-        },
+      getCenterAfterDrag({
+        center: mapCenter,
+        dragOffset: nextOffset,
         zoom,
-      ),
+      }),
     );
     setDragOffset({ x: 0, y: 0 });
   }
 
   function selectNearestMarker(locationX: number, locationY: number) {
     const point = {
-      x: locationX - canvasLeft - latestDragOffset.current.x,
-      y: locationY - canvasTop - latestDragOffset.current.y,
+      x: locationX - canvas.left - latestDragOffset.current.x,
+      y: locationY - canvas.top - latestDragOffset.current.y,
     };
     const hitIndex = markerCoordinates.findIndex((coordinate) => {
       const dx = coordinate.left - point.x;
@@ -285,7 +281,7 @@ export function MapHome({
           );
         },
       }),
-    [canvasLeft, canvasTop, mapCenter, markerCoordinates, fieldGroups, zoom],
+    [canvas.left, canvas.top, mapCenter, markerCoordinates, fieldGroups, zoom],
   );
 
   const mapWheelProps =
@@ -302,11 +298,16 @@ export function MapHome({
               return;
             }
             const now = Date.now();
-            if (now - lastWheelZoomAt.current < 110) {
+            const zoomDelta = getWheelZoomDelta({
+              deltaY,
+              lastZoomAt: lastWheelZoomAt.current,
+              now,
+            });
+            if (zoomDelta === 0) {
               return;
             }
             lastWheelZoomAt.current = now;
-            applyZoomDelta(deltaY > 0 ? -1 : 1);
+            applyZoomDelta(zoomDelta);
           },
         } as object)
       : {};
@@ -377,10 +378,10 @@ export function MapHome({
           style={[
             styles.mapCanvas,
             {
-              left: canvasLeft,
-              top: canvasTop,
-              width: canvasWidth,
-              height: canvasHeight,
+              left: canvas.left,
+              top: canvas.top,
+              width: canvas.width,
+              height: canvas.height,
               transform: [
                 { translateX: dragOffset.x },
                 { translateY: dragOffset.y },
@@ -407,7 +408,7 @@ export function MapHome({
             style={StyleSheet.absoluteFill}
             onPress={onClearSelection}
           >
-            <View pointerEvents="none" style={styles.mapOverlay} />
+            <View style={[styles.mapOverlay, styles.noPointerEvents]} />
           </Pressable>
           {fieldGroups.map((group, index) => {
             const coordinate = markerCoordinates[index];
@@ -462,9 +463,9 @@ export function MapHome({
           })}
           {userLocation ? (
             <View
-              pointerEvents="none"
               style={[
                 styles.userLocationMarker,
+                styles.noPointerEvents,
                 {
                   left:
                     projectLocation(userLocation, mapData.topLeft, zoom).left -
@@ -541,10 +542,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(247,241,232,0.16)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.3,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    ...platformShadow({ opacity: 0.3, radius: 18, y: 10 }),
     zIndex: 18,
   },
   userLocationMarker: {
@@ -605,12 +603,9 @@ const styles = StyleSheet.create({
     borderColor: "#0A110E",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 8,
+    ...platformShadow({ elevation: 8, opacity: 0.35, radius: 8, y: 5 }),
   },
+  noPointerEvents: { pointerEvents: "none" },
   mapMarkerPinActive: {
     width: 38,
     height: 38,

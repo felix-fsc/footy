@@ -28,74 +28,71 @@ import {
   isTeamFull,
   publicHandle,
 } from "../utils/matchUtils";
+import { platformShadow } from "../utils/styleUtils";
 
 type MatchDetailScreenProps = {
-  match: MatchResponse | null;
-  isAdmin: boolean;
-  loading: boolean;
-  selectedIsParticipant: boolean;
-  selectedIsOwner: boolean;
-  selectedIsOpen: boolean;
-  messages: MessageResponse[];
-  messageText: string;
-  showMatchChat: boolean;
-  showPublicProfile: boolean;
-  publicProfile: PlayerProfileResponse | null;
-  topInset: number;
-  bottomInset: number;
-  onHome: () => void;
-  onCreate: () => void;
-  onProfile: () => void;
-  onEditMatch: (match: MatchResponse) => void;
-  onCancelMatch: (matchId: string) => void;
-  onDeleteMatch: (matchId: string) => void;
-  onRemovePlayer: (matchId: string, userId: string) => void;
-  onLeaveMatch: (matchId: string) => void;
-  onJoinMatch: (matchId: string, teamSide: TeamSide) => void;
-  onOpenDirections: (match: MatchResponse) => void;
-  onOpenProfile: (userId: string) => void;
-  onOpenChat: (matchId: string) => void;
-  onCloseChat: () => void;
-  onRefreshMessages: (matchId: string) => void;
-  onMessageTextChange: (value: string) => void;
-  onSendMessage: () => void;
-  onQuickMessage: (content: string) => void;
-  onClosePublicProfile: () => void;
+  actions: {
+    onCancelMatch: (matchId: string) => void;
+    onDeleteMatch: (matchId: string) => void;
+    onEditMatch: (match: MatchResponse) => void;
+    onJoinMatch: (matchId: string, teamSide: TeamSide) => void;
+    onLeaveMatch: (matchId: string) => void;
+    onOpenDirections: (match: MatchResponse) => void;
+    onOpenProfile: (userId: string) => void;
+    onRemovePlayer: (matchId: string, userId: string) => void;
+  };
+  chat: {
+    messageText: string;
+    messages: MessageResponse[];
+    onCloseChat: () => void;
+    onMessageTextChange: (value: string) => void;
+    onOpenChat: (matchId: string) => void;
+    onQuickMessage: (content: string) => void;
+    onRefreshMessages: (matchId: string) => void;
+    onSendMessage: () => void;
+    showMatchChat: boolean;
+  };
+  layout: {
+    bottomInset: number;
+    topInset: number;
+  };
+  navigation: {
+    onCreate: () => void;
+    onHome: () => void;
+    onProfile: () => void;
+  };
+  publicProfileState: {
+    onClosePublicProfile: () => void;
+    publicProfile: PlayerProfileResponse | null;
+    showPublicProfile: boolean;
+  };
+  state: {
+    isAdmin: boolean;
+    loading: boolean;
+    match: MatchResponse | null;
+    selectedIsOpen: boolean;
+    selectedIsOwner: boolean;
+    selectedIsParticipant: boolean;
+  };
 };
 
 export function MatchDetailScreen({
-  match,
-  isAdmin,
-  loading,
-  selectedIsParticipant,
-  selectedIsOwner,
-  selectedIsOpen,
-  messages,
-  messageText,
-  showMatchChat,
-  showPublicProfile,
-  publicProfile,
-  topInset,
-  bottomInset,
-  onHome,
-  onCreate,
-  onProfile,
-  onEditMatch,
-  onCancelMatch,
-  onDeleteMatch,
-  onRemovePlayer,
-  onLeaveMatch,
-  onJoinMatch,
-  onOpenDirections,
-  onOpenProfile,
-  onOpenChat,
-  onCloseChat,
-  onRefreshMessages,
-  onMessageTextChange,
-  onSendMessage,
-  onQuickMessage,
-  onClosePublicProfile,
+  actions,
+  chat,
+  layout,
+  navigation,
+  publicProfileState,
+  state,
 }: MatchDetailScreenProps) {
+  const {
+    isAdmin,
+    loading,
+    match,
+    selectedIsOpen,
+    selectedIsOwner,
+    selectedIsParticipant,
+  } = state;
+
   return (
     <SafeAreaView style={styles.darkScreen}>
       <StatusBar style="light" />
@@ -104,8 +101,8 @@ export function MatchDetailScreen({
         contentContainerStyle={[
           styles.detailContent,
           {
-            paddingTop: topInset + 18,
-            paddingBottom: bottomInset + 112,
+            paddingTop: layout.topInset + 18,
+            paddingBottom: layout.bottomInset + 112,
           },
         ]}
         keyboardShouldPersistTaps="handled"
@@ -115,7 +112,7 @@ export function MatchDetailScreen({
             <Text style={styles.smallLabel}>Detalle</Text>
             <Text style={styles.screenTitle}>Partido</Text>
           </View>
-          <Pressable style={styles.closePill} onPress={onHome}>
+          <Pressable style={styles.closePill} onPress={navigation.onHome}>
             <Text style={styles.closePillText}>Volver</Text>
           </Pressable>
         </View>
@@ -144,7 +141,7 @@ export function MatchDetailScreen({
                           styles.adminFloatingEditButton,
                           pressed && styles.adminFloatingButtonPressed,
                         ]}
-                        onPress={() => onEditMatch(match)}
+                        onPress={() => actions.onEditMatch(match)}
                         disabled={loading}
                         accessibilityRole="button"
                         accessibilityLabel="Editar partido"
@@ -192,7 +189,9 @@ export function MatchDetailScreen({
                       {match.field?.address ?? "Direccion pendiente"} -{" "}
                       {match.field?.city ?? "Sin ciudad"}
                     </Text>
-                    <Pressable onPress={() => onOpenProfile(match.createdBy.id)}>
+                    <Pressable
+                      onPress={() => actions.onOpenProfile(match.createdBy.id)}
+                    >
                       <Text style={styles.detailOrganizer} numberOfLines={1}>
                         Organiza {publicHandle(match.createdBy)}
                       </Text>
@@ -202,7 +201,7 @@ export function MatchDetailScreen({
 
                 <Pressable
                   style={styles.directionsButton}
-                  onPress={() => onOpenDirections(match)}
+                  onPress={() => actions.onOpenDirections(match)}
                 >
                   <Text style={styles.directionsButtonText}>Como llegar</Text>
                 </Pressable>
@@ -215,7 +214,7 @@ export function MatchDetailScreen({
                           styles.adminInlineActionButton,
                           pressed && styles.inlineActionPressed,
                         ]}
-                        onPress={() => onCancelMatch(match.id)}
+                        onPress={() => actions.onCancelMatch(match.id)}
                         disabled={loading}
                       >
                         <Text style={styles.adminInlineActionText}>Cancelar</Text>
@@ -227,7 +226,7 @@ export function MatchDetailScreen({
                         styles.adminInlineDangerButton,
                         pressed && styles.inlineActionPressed,
                       ]}
-                      onPress={() => onDeleteMatch(match.id)}
+                      onPress={() => actions.onDeleteMatch(match.id)}
                       disabled={loading}
                     >
                       <Text
@@ -253,9 +252,11 @@ export function MatchDetailScreen({
                   <TeamOccupancy match={match} />
                   <TeamRoster
                     match={match}
-                    onOpenProfile={onOpenProfile}
+                    onOpenProfile={actions.onOpenProfile}
                     canRemovePlayers={isAdmin}
-                    onRemovePlayer={(userId) => onRemovePlayer(match.id, userId)}
+                    onRemovePlayer={(userId) =>
+                      actions.onRemovePlayer(match.id, userId)
+                    }
                   />
                 </View>
 
@@ -263,7 +264,7 @@ export function MatchDetailScreen({
                   {selectedIsParticipant && match.status !== "CANCELLED" ? (
                     <Pressable
                       style={styles.ghostDangerButton}
-                      onPress={() => onLeaveMatch(match.id)}
+                      onPress={() => actions.onLeaveMatch(match.id)}
                       disabled={loading}
                     >
                       <Text style={styles.ghostDangerText}>Salir del partido</Text>
@@ -288,7 +289,7 @@ export function MatchDetailScreen({
                             (loading || !selectedIsOpen || isTeamFull(match, "A")) &&
                               styles.actionButtonDisabled,
                           ]}
-                          onPress={() => onJoinMatch(match.id, "A")}
+                          onPress={() => actions.onJoinMatch(match.id, "A")}
                           disabled={loading || !selectedIsOpen || isTeamFull(match, "A")}
                         >
                           <Text style={styles.darkJoinText}>
@@ -301,7 +302,7 @@ export function MatchDetailScreen({
                             (loading || !selectedIsOpen || isTeamFull(match, "B")) &&
                               styles.actionButtonDisabled,
                           ]}
-                          onPress={() => onJoinMatch(match.id, "B")}
+                          onPress={() => actions.onJoinMatch(match.id, "B")}
                           disabled={loading || !selectedIsOpen || isTeamFull(match, "B")}
                         >
                           <Text style={styles.limeJoinText}>
@@ -314,7 +315,7 @@ export function MatchDetailScreen({
                   {selectedIsOwner && !isAdmin && match.status !== "CANCELLED" ? (
                     <Pressable
                       style={styles.cancelMatchButton}
-                      onPress={() => onCancelMatch(match.id)}
+                      onPress={() => actions.onCancelMatch(match.id)}
                       disabled={loading}
                     >
                       <Text style={styles.cancelMatchText}>Cancelar partido</Text>
@@ -324,7 +325,7 @@ export function MatchDetailScreen({
 
                 <Pressable
                   style={styles.detailChatLauncher}
-                  onPress={() => onOpenChat(match.id)}
+                  onPress={() => chat.onOpenChat(match.id)}
                 >
                   <View style={styles.detailChatIcon}>
                     <View style={styles.detailChatBubbleShape}>
@@ -336,8 +337,8 @@ export function MatchDetailScreen({
                     <Text style={styles.detailChatTitle}>Chat del partido</Text>
                     <Text style={styles.detailChatMeta}>
                       {selectedIsParticipant
-                        ? messages.length > 0
-                          ? `${messages.length} mensajes`
+                        ? chat.messages.length > 0
+                          ? `${chat.messages.length} mensajes`
                           : "Coordina con tu equipo"
                         : "Unete al partido para escribir"}
                     </Text>
@@ -348,23 +349,23 @@ export function MatchDetailScreen({
             </View>
 
             <MatchChatModal
-              visible={showMatchChat}
+              visible={chat.showMatchChat}
               loading={loading}
-              bottomInset={bottomInset}
-              messages={messages}
-              messageText={messageText}
+              bottomInset={layout.bottomInset}
+              messages={chat.messages}
+              messageText={chat.messageText}
               participant={selectedIsParticipant}
-              onClose={onCloseChat}
-              onRefresh={() => onRefreshMessages(match.id)}
-              onOpenProfile={onOpenProfile}
-              onMessageTextChange={onMessageTextChange}
-              onSend={onSendMessage}
-              onQuickMessage={onQuickMessage}
+              onClose={chat.onCloseChat}
+              onRefresh={() => chat.onRefreshMessages(match.id)}
+              onOpenProfile={actions.onOpenProfile}
+              onMessageTextChange={chat.onMessageTextChange}
+              onSend={chat.onSendMessage}
+              onQuickMessage={chat.onQuickMessage}
             />
             <PublicProfileModal
-              visible={showPublicProfile}
-              profile={publicProfile}
-              onClose={onClosePublicProfile}
+              visible={publicProfileState.showPublicProfile}
+              profile={publicProfileState.publicProfile}
+              onClose={publicProfileState.onClosePublicProfile}
             />
           </>
         ) : (
@@ -376,9 +377,9 @@ export function MatchDetailScreen({
       </ScrollView>
       <BottomNav
         active="home"
-        onHome={onHome}
-        onCreate={onCreate}
-        onProfile={onProfile}
+        onHome={navigation.onHome}
+        onCreate={navigation.onCreate}
+        onProfile={navigation.onProfile}
       />
     </SafeAreaView>
   );
@@ -427,10 +428,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.12)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.24,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
+    ...platformShadow({ opacity: 0.24, radius: 24, y: 14 }),
   },
   detailCover: {
     minHeight: 238,
@@ -493,10 +491,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(247,241,232,0.24)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000000",
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+    ...platformShadow({ opacity: 0.22, radius: 12, y: 8 }),
   },
   adminFloatingButtonPressed: { opacity: 0.78, transform: [{ scale: 0.96 }] },
   detailCoverContent: { gap: 7 },

@@ -2,7 +2,7 @@ import { StyleSheet, View } from "react-native";
 
 export function ScreenBubbles() {
   return (
-    <View pointerEvents="none" style={styles.screenBubbles}>
+    <View style={[styles.screenBubbles, styles.noPointerEvents]}>
       <View style={styles.screenBubbleOne} />
       <View style={styles.screenBubbleTwo} />
       <View style={styles.screenBubbleThree} />
@@ -46,4 +46,5 @@ const styles = StyleSheet.create({
     bottom: 52,
     backgroundColor: "rgba(179,243,81,0.045)",
   },
+  noPointerEvents: { pointerEvents: "none" },
 });

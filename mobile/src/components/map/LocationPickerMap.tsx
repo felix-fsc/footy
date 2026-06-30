@@ -17,11 +17,13 @@ import {
   MAP_TILE_SIZE,
   clampMapZoom,
   geocodePlace,
+  getCenterAfterDrag,
   getCityMapCenter,
+  getMapCanvasFrame,
   getTouchDistance,
   getVisibleTiles,
-  latLonToWorld,
   projectLocation,
+  getWheelZoomDelta,
   worldToLatLon,
 } from "../../utils/mapUtils";
 
@@ -67,13 +69,10 @@ export function LocationPickerMap({
     setCenter(value);
   }, [value.latitude, value.longitude]);
 
-  const canvasWidth = Math.max(viewport.width + 768, 1200);
-  const canvasHeight = Math.max(viewport.height + 768, 1200);
-  const canvasLeft = (viewport.width - canvasWidth) / 2;
-  const canvasTop = (viewport.height - canvasHeight) / 2;
+  const canvas = getMapCanvasFrame(viewport);
   const mapData = useMemo(
-    () => getVisibleTiles(center, zoom, canvasWidth, canvasHeight),
-    [canvasHeight, canvasWidth, center, zoom],
+    () => getVisibleTiles(center, zoom, canvas.width, canvas.height),
+    [canvas.height, canvas.width, center, zoom],
   );
   const selectedPoint = projectLocation(value, mapData.topLeft, zoom);
 
@@ -81,15 +80,12 @@ export function LocationPickerMap({
     if (nextOffset.x === 0 && nextOffset.y === 0) {
       return;
     }
-    const centerWorld = latLonToWorld(center, zoom);
     setCenter(
-      worldToLatLon(
-        {
-          x: centerWorld.x - nextOffset.x,
-          y: centerWorld.y - nextOffset.y,
-        },
+      getCenterAfterDrag({
+        center,
+        dragOffset: nextOffset,
         zoom,
-      ),
+      }),
     );
     setDragOffset({ x: 0, y: 0 });
   }
@@ -97,8 +93,8 @@ export function LocationPickerMap({
   function pickPoint(locationX: number, locationY: number) {
     const worldPoint = {
       x:
-        mapData.topLeft.x + locationX - canvasLeft - latestDragOffset.current.x,
-      y: mapData.topLeft.y + locationY - canvasTop - latestDragOffset.current.y,
+        mapData.topLeft.x + locationX - canvas.left - latestDragOffset.current.x,
+      y: mapData.topLeft.y + locationY - canvas.top - latestDragOffset.current.y,
     };
     const nextLocation = worldToLatLon(worldPoint, zoom);
     skipNextCenterSync.current = true;
@@ -194,7 +190,7 @@ export function LocationPickerMap({
           pickPoint(event.nativeEvent.locationX, event.nativeEvent.locationY);
         },
       }),
-    [canvasLeft, canvasTop, center, mapData.topLeft, onChange, zoom],
+    [canvas.left, canvas.top, center, mapData.topLeft, onChange, zoom],
   );
 
   const mapWheelProps =
@@ -211,11 +207,16 @@ export function LocationPickerMap({
               return;
             }
             const now = Date.now();
-            if (now - lastWheelZoomAt.current < 110) {
+            const zoomDelta = getWheelZoomDelta({
+              deltaY,
+              lastZoomAt: lastWheelZoomAt.current,
+              now,
+            });
+            if (zoomDelta === 0) {
               return;
             }
             lastWheelZoomAt.current = now;
-            applyZoomDelta(deltaY > 0 ? -1 : 1);
+            applyZoomDelta(zoomDelta);
           },
         } as object)
       : {};
@@ -231,10 +232,10 @@ export function LocationPickerMap({
           style={[
             styles.mapCanvas,
             {
-              left: canvasLeft,
-              top: canvasTop,
-              width: canvasWidth,
-              height: canvasHeight,
+              left: canvas.left,
+              top: canvas.top,
+              width: canvas.width,
+              height: canvas.height,
               transform: [
                 { translateX: dragOffset.x },
                 { translateY: dragOffset.y },
@@ -257,11 +258,11 @@ export function LocationPickerMap({
               ]}
             />
           ))}
-          <View pointerEvents="none" style={styles.mapOverlay} />
+          <View style={[styles.mapOverlay, styles.noPointerEvents]} />
           <View
-            pointerEvents="none"
             style={[
               styles.locationPickedMarker,
+              styles.noPointerEvents,
               {
                 left: selectedPoint.left - 11,
                 top: selectedPoint.top - 25,
@@ -381,4 +382,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  noPointerEvents: { pointerEvents: "none" },
 });

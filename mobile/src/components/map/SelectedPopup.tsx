@@ -1,6 +1,7 @@
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MatchResponse } from "../../types/domain";
 import { formatPriceFromCents } from "../../utils/matchUtils";
+import { platformShadow } from "../../utils/styleUtils";
 import { MatchImageBackground, OccupancyBar } from "../matches/MatchMedia";
 import { StatusBadge } from "../ui/FormControls";
 
@@ -179,10 +180,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.16)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.32,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
+    ...platformShadow({ opacity: 0.32, radius: 24, y: 14 }),
     zIndex: 22,
   },
   popupImageWrap: {

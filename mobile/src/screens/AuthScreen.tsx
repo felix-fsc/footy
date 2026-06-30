@@ -15,6 +15,7 @@ import { ScreenBubbles } from "../components/chrome/ScreenBubbles";
 import { Field, PasswordField } from "../components/ui/FormControls";
 import { ModeButton } from "../components/ui/ModeButton";
 import type { AuthMode } from "../types/domain";
+import { platformShadow } from "../utils/styleUtils";
 
 type AuthScreenProps = {
   authMode: AuthMode;
@@ -65,8 +66,8 @@ export function AuthScreen({
         </View>
 
         <View style={styles.authCard}>
-          <View pointerEvents="none" style={styles.authCardBubbleOne} />
-          <View pointerEvents="none" style={styles.authCardBubbleTwo} />
+          <View style={[styles.authCardBubbleOne, styles.noPointerEvents]} />
+          <View style={[styles.authCardBubbleTwo, styles.noPointerEvents]} />
           <View style={styles.modeSwitchLight}>
             <ModeButton
               label="Entrar"
@@ -223,11 +224,9 @@ const styles = StyleSheet.create({
     padding: Platform.OS === "android" ? 12 : 14,
     gap: Platform.OS === "android" ? 9 : 10,
     overflow: "hidden",
-    shadowColor: "#000000",
-    shadowOpacity: 0.28,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 16 },
+    ...platformShadow({ opacity: 0.28, radius: 26, y: 16 }),
   },
+  noPointerEvents: { pointerEvents: "none" },
   authCardBubbleOne: {
     position: "absolute",
     width: 120,

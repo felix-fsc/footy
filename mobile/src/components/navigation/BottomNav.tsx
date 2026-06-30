@@ -1,6 +1,7 @@
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AppTab } from "../../types/domain";
+import { platformShadow } from "../../utils/styleUtils";
 
 const MOBILE_EDGE_PADDING = 10;
 
@@ -95,10 +96,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     padding: 5,
     gap: 5,
-    shadowColor: "#000000",
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    ...platformShadow({ opacity: 0.28, radius: 18, y: 8 }),
   },
   navItem: {
     flex: 1,

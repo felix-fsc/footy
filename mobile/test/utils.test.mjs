@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  ApiRequestError,
+  readApiErrorText,
+} from "../src/api/errors.ts";
+import {
   authErrorMessage,
   matchMutationErrorMessage,
   validateAuthForm,
@@ -16,11 +20,29 @@ import {
   validateMatchDraftValues,
 } from "../src/utils/matchDraftUtils.ts";
 import {
+  dateInputFromInstant,
+  formatDraftPrice,
+  formatPriceFromCents,
   getMatchViewerState,
   getVisibleMatches,
   isTeamFull,
+  timeInputFromInstant,
   userParticipatesInMatch,
 } from "../src/utils/matchUtils.ts";
+import {
+  clampMapZoom,
+  getCenterAfterDrag,
+  getCityMapCenter,
+  getMapCanvasFrame,
+  getMapCenter,
+  getMatchLocation,
+  getTouchDistance,
+  getVisibleTiles,
+  getWheelZoomDelta,
+  latLonToWorld,
+  projectLocation,
+  worldToLatLon,
+} from "../src/utils/mapUtils.ts";
 
 const now = new Date("2026-06-30T12:00:00.000Z");
 
@@ -181,6 +203,40 @@ test("traduce errores habituales de auth a mensajes claros", () => {
   );
 });
 
+test("lee errores de API desde texto y JSON", () => {
+  assert.equal(readApiErrorText("  error plano  "), "error plano");
+  assert.equal(
+    readApiErrorText(JSON.stringify({ detail: "Email ya registrado" })),
+    "Email ya registrado",
+  );
+  assert.equal(
+    readApiErrorText(
+      JSON.stringify({
+        message: "Datos invalidos",
+        errors: {
+          email: ["Email invalido"],
+          password: ["Contrasena corta"],
+        },
+      }),
+    ),
+    "Datos invalidos Email invalido Contrasena corta",
+  );
+
+  const error = new ApiRequestError(409, JSON.stringify({ message: "Duplicado" }));
+  assert.equal(error.status, 409);
+  assert.equal(error.message, "Duplicado");
+});
+
+test("formatea precios y entradas de fecha para formularios", () => {
+  assert.equal(formatPriceFromCents(null), "Gratis");
+  assert.equal(formatPriceFromCents(350), "3.50 EUR");
+  assert.equal(formatDraftPrice("0"), "Gratis");
+  assert.equal(formatDraftPrice("3,5"), "3.50 EUR");
+  assert.equal(dateInputFromInstant("2026-07-01T19:30:00.000Z"), "2026-07-01");
+  assert.match(timeInputFromInstant("2026-07-01T19:30:00.000Z"), /^\d{2}:\d{2}$/);
+  assert.equal(timeInputFromInstant("fecha mala"), "19:00");
+});
+
 test("traduce errores de administracion de partidos", () => {
   assert.equal(
     matchMutationErrorMessage(apiError(403, "forbidden")),
@@ -334,6 +390,113 @@ test("filtra partidos visibles por fecha, busqueda, disponibilidad y mis partido
     }).map((item) => item.id),
     ["match-1"],
   );
+});
+
+test("calcula ubicaciones y limites basicos del mapa", () => {
+  const huelvaCenter = getCityMapCenter("Huelva");
+  assert.deepEqual(huelvaCenter, { latitude: 37.26142, longitude: -6.94472 });
+  assert.deepEqual(getCityMapCenter("Madrid centro"), {
+    latitude: 40.416775,
+    longitude: -3.70379,
+  });
+
+  const locatedMatch = match();
+  assert.deepEqual(getMatchLocation(locatedMatch), {
+    latitude: 37.25,
+    longitude: -6.95,
+  });
+  assert.equal(
+    getMatchLocation(
+      match({
+        field: {
+          ...locatedMatch.field,
+          latitude: null,
+        },
+      }),
+    ),
+    null,
+  );
+
+  assert.deepEqual(getMapCenter([locatedMatch], null), {
+    latitude: 37.25,
+    longitude: -6.95,
+  });
+  assert.equal(clampMapZoom(1), 11);
+  assert.equal(clampMapZoom(99), 17);
+  assert.equal(getTouchDistance([{ pageX: 0, pageY: 0 }]), 0);
+  assert.equal(
+    getTouchDistance([
+      { pageX: 0, pageY: 0 },
+      { pageX: 3, pageY: 4 },
+    ]),
+    5,
+  );
+});
+
+test("convierte entre lat/lon y coordenadas de mundo de forma reversible", () => {
+  const location = { latitude: 37.26142, longitude: -6.94472 };
+  const world = latLonToWorld(location, 14);
+  const roundTrip = worldToLatLon(world, 14);
+
+  assert.ok(Math.abs(roundTrip.latitude - location.latitude) < 0.000001);
+  assert.ok(Math.abs(roundTrip.longitude - location.longitude) < 0.000001);
+});
+
+test("calcula frame, rueda y drag del mapa", () => {
+  assert.deepEqual(getMapCanvasFrame({ width: 300, height: 500 }), {
+    width: 1200,
+    height: 1268,
+    left: -450,
+    top: -384,
+  });
+  assert.equal(
+    getWheelZoomDelta({ deltaY: 2, lastZoomAt: 0, now: 1000 }),
+    0,
+  );
+  assert.equal(
+    getWheelZoomDelta({ deltaY: 80, lastZoomAt: 950, now: 1000 }),
+    0,
+  );
+  assert.equal(
+    getWheelZoomDelta({ deltaY: 80, lastZoomAt: 800, now: 1000 }),
+    -1,
+  );
+  assert.equal(
+    getWheelZoomDelta({ deltaY: -80, lastZoomAt: 800, now: 1000 }),
+    1,
+  );
+
+  const center = { latitude: 37.26142, longitude: -6.94472 };
+  assert.deepEqual(
+    getCenterAfterDrag({
+      center,
+      dragOffset: { x: 0, y: 0 },
+      zoom: 14,
+    }),
+    center,
+  );
+
+  const dragged = getCenterAfterDrag({
+    center,
+    dragOffset: { x: 120, y: -80 },
+    zoom: 14,
+  });
+  assert.notEqual(dragged.latitude, center.latitude);
+  assert.notEqual(dragged.longitude, center.longitude);
+});
+
+test("genera tiles visibles y proyecta ubicaciones en pantalla", () => {
+  const center = { latitude: 37.26142, longitude: -6.94472 };
+  const mapData = getVisibleTiles(center, 14, 512, 512);
+
+  assert.equal(mapData.width, 512);
+  assert.equal(mapData.height, 512);
+  assert.ok(mapData.tiles.length > 0);
+  assert.ok(mapData.tiles.every((tile) => tile.key.startsWith("14-")));
+
+  const projected = projectLocation(center, mapData.topLeft, 14);
+  assert.ok(Math.abs(projected.left - 256) < 1);
+  assert.ok(Math.abs(projected.top - 256) < 1);
 });
 
 test("detecta participacion y equipos completos", () => {

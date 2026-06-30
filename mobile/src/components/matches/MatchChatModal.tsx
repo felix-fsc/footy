@@ -1,6 +1,7 @@
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MessageResponse } from "../../types/domain";
 import { formatTime, publicHandle } from "../../utils/matchUtils";
+import { platformShadow } from "../../utils/styleUtils";
 import { RefreshIcon } from "../icons/AppIcons";
 import { QuickMessageButton } from "../home/HomeWidgets";
 
@@ -151,10 +152,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(247,241,232,0.12)",
     padding: 16,
     gap: 12,
-    shadowColor: "#000000",
-    shadowOpacity: 0.28,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: -12 },
+    ...platformShadow({ opacity: 0.28, radius: 24, y: -12 }),
   },
   chatHandle: {
     width: 48,

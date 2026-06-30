@@ -1,6 +1,7 @@
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MatchResponse } from "../../types/domain";
 import { formatDate, userParticipatesInMatch } from "../../utils/matchUtils";
+import { platformShadow } from "../../utils/styleUtils";
 import { StatusBadge } from "../ui/FormControls";
 import { MatchImageBackground, OccupancyBar } from "./MatchMedia";
 
@@ -143,10 +144,12 @@ const styles = StyleSheet.create({
   listCardSelected: {
     borderWidth: 2,
     borderColor: "#7FEF9B",
-    shadowColor: "#7FEF9B",
-    shadowOpacity: 0.18,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
+    ...platformShadow({
+      color: "#7FEF9B",
+      opacity: 0.18,
+      radius: 18,
+      y: 10,
+    }),
   },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   listCardTitle: { flex: 1, color: "#F7F1E8", fontSize: 17, fontWeight: "900" },

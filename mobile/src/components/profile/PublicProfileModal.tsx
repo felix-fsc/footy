@@ -1,6 +1,7 @@
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { PlayerProfileResponse } from "../../types/domain";
 import { positionLabel, publicHandle } from "../../utils/matchUtils";
+import { platformShadow } from "../../utils/styleUtils";
 
 type PublicProfileModalProps = {
   visible: boolean;
@@ -90,10 +91,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(247,241,232,0.12)",
     padding: 18,
     gap: 12,
-    shadowColor: "#000000",
-    shadowOpacity: 0.3,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 16 },
+    ...platformShadow({ opacity: 0.3, radius: 28, y: 16 }),
   },
   publicProfileTop: {
     flexDirection: "row",
