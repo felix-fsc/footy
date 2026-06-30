@@ -1,5 +1,10 @@
-import { useState } from "react";
-import type { MapLocation, MatchResponse, SavedFieldResponse } from "../types/domain";
+import { useCallback, useState } from "react";
+import { DEFAULT_MATCH_DRAFT } from "../constants/matchDraftDefaults";
+import type {
+  MapLocation,
+  MatchResponse,
+  SavedFieldResponse,
+} from "../types/domain";
 import { draftValuesFromMatch } from "../utils/matchDraftUtils";
 import {
   dateInputFromInstant,
@@ -8,54 +13,60 @@ import {
 } from "../utils/matchUtils";
 import { DEFAULT_MAP_CENTER } from "../utils/mapUtils";
 
-const DEFAULT_FIELD_NAME = "Campo Municipal Saladillo";
-const DEFAULT_FIELD_ADDRESS = "Calle Hermanos Alvarez Quintero 13";
-const DEFAULT_CITY = "Huelva";
-
 export function useMatchDraft() {
-  const [title, setTitle] = useState("Partido Footy");
-  const [fieldName, setFieldNameState] = useState(DEFAULT_FIELD_NAME);
-  const [address, setAddress] = useState(DEFAULT_FIELD_ADDRESS);
-  const [city, setCity] = useState(DEFAULT_CITY);
+  const [title, setTitle] = useState<string>(DEFAULT_MATCH_DRAFT.title);
+  const [fieldName, setFieldNameState] = useState<string>(
+    DEFAULT_MATCH_DRAFT.fieldName,
+  );
+  const [address, setAddress] = useState<string>(DEFAULT_MATCH_DRAFT.address);
+  const [city, setCity] = useState<string>(DEFAULT_MATCH_DRAFT.city);
   const [date, setDateState] = useState(tomorrowDateParts());
-  const [time, setTime] = useState("19:00");
-  const [maxPlayers, setMaxPlayers] = useState("5");
-  const [pricePerPerson, setPricePerPerson] = useState("3.50");
-  const [latitude, setLatitude] = useState(37.26142);
-  const [longitude, setLongitude] = useState(-6.94472);
-  const [selectedSavedFieldId, setSelectedSavedFieldId] = useState<string | null>(null);
+  const [time, setTime] = useState<string>(DEFAULT_MATCH_DRAFT.time);
+  const [maxPlayers, setMaxPlayers] = useState<string>(
+    DEFAULT_MATCH_DRAFT.maxPlayers,
+  );
+  const [pricePerPerson, setPricePerPerson] = useState<string>(
+    DEFAULT_MATCH_DRAFT.pricePerPerson,
+  );
+  const [latitude, setLatitude] = useState<number>(DEFAULT_MATCH_DRAFT.latitude);
+  const [longitude, setLongitude] = useState<number>(
+    DEFAULT_MATCH_DRAFT.longitude,
+  );
+  const [selectedSavedFieldId, setSelectedSavedFieldId] = useState<
+    string | null
+  >(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
 
-  function reset() {
+  const reset = useCallback(() => {
     setEditingMatchId(null);
-    setTitle("Partido Footy");
-    setFieldNameState(DEFAULT_FIELD_NAME);
-    setAddress(DEFAULT_FIELD_ADDRESS);
-    setCity(DEFAULT_CITY);
+    setTitle(DEFAULT_MATCH_DRAFT.title);
+    setFieldNameState(DEFAULT_MATCH_DRAFT.fieldName);
+    setAddress(DEFAULT_MATCH_DRAFT.address);
+    setCity(DEFAULT_MATCH_DRAFT.city);
     setDateState(tomorrowDateParts());
-    setTime("19:00");
-    setMaxPlayers("5");
-    setPricePerPerson("3.50");
-    setLatitude(37.26142);
-    setLongitude(-6.94472);
+    setTime(DEFAULT_MATCH_DRAFT.time);
+    setMaxPlayers(DEFAULT_MATCH_DRAFT.maxPlayers);
+    setPricePerPerson(DEFAULT_MATCH_DRAFT.pricePerPerson);
+    setLatitude(DEFAULT_MATCH_DRAFT.latitude);
+    setLongitude(DEFAULT_MATCH_DRAFT.longitude);
     setSelectedSavedFieldId(null);
     setShowPreview(false);
     setShowCalendar(false);
-  }
+  }, []);
 
-  function closePanels() {
+  const closePanels = useCallback(() => {
     setEditingMatchId(null);
     setShowPreview(false);
     setShowCalendar(false);
-  }
+  }, []);
 
-  function startCreate() {
+  const startCreate = useCallback(() => {
     reset();
-  }
+  }, [reset]);
 
-  function startEdit(match: MatchResponse) {
+  const startEdit = useCallback((match: MatchResponse) => {
     const draftValues = draftValuesFromMatch(match);
     setEditingMatchId(match.id);
     setTitle(draftValues.title);
@@ -71,9 +82,9 @@ export function useMatchDraft() {
     setSelectedSavedFieldId(null);
     setShowPreview(false);
     setShowCalendar(false);
-  }
+  }, []);
 
-  function selectSavedField(field: SavedFieldResponse | null) {
+  const selectSavedField = useCallback((field: SavedFieldResponse | null) => {
     setSelectedSavedFieldId(field?.id ?? null);
     if (!field) {
       return;
@@ -87,29 +98,42 @@ export function useMatchDraft() {
     if (typeof field.longitude === "number") {
       setLongitude(field.longitude);
     }
-  }
+  }, []);
 
-  function setFieldName(value: string) {
+  const setFieldName = useCallback((value: string) => {
     setSelectedSavedFieldId(null);
     setFieldNameState(value);
-  }
+  }, []);
 
-  function setDate(value: string) {
+  const setDate = useCallback((value: string) => {
     setDateState(value);
     setShowCalendar(false);
-  }
+  }, []);
 
-  function applyLocation(location: MapLocation, nextAddress?: string, nextCity?: string) {
-    setSelectedSavedFieldId(null);
-    setLatitude(location.latitude);
-    setLongitude(location.longitude);
-    if (nextAddress) {
-      setAddress(nextAddress);
-    }
-    if (nextCity) {
-      setCity(nextCity);
-    }
-  }
+  const applyLocation = useCallback(
+    (location: MapLocation, nextAddress?: string, nextCity?: string) => {
+      setSelectedSavedFieldId(null);
+      setLatitude(location.latitude);
+      setLongitude(location.longitude);
+      if (nextAddress) {
+        setAddress(nextAddress);
+      }
+      if (nextCity) {
+        setCity(nextCity);
+      }
+    },
+    [],
+  );
+
+  const toggleCalendar = useCallback(
+    () => setShowCalendar((current) => !current),
+    [],
+  );
+  const clearSelectedSavedField = useCallback(
+    () => setSelectedSavedFieldId(null),
+    [],
+  );
+  const clearEditing = useCallback(() => setEditingMatchId(null), []);
 
   return {
     title,
@@ -134,14 +158,14 @@ export function useMatchDraft() {
     setPricePerPerson,
     setShowPreview,
     setShowCalendar,
-    toggleCalendar: () => setShowCalendar((current) => !current),
+    toggleCalendar,
     closePanels,
     reset,
     startCreate,
     startEdit,
     selectSavedField,
     applyLocation,
-    clearSelectedSavedField: () => setSelectedSavedFieldId(null),
-    clearEditing: () => setEditingMatchId(null),
+    clearSelectedSavedField,
+    clearEditing,
   };
 }

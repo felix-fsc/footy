@@ -2,13 +2,17 @@ import { useCallback, useEffect, useState } from "react";
 import { Platform } from "react-native";
 import { hasGoogleClientId } from "../api/config";
 import { sessionStorageAdapter } from "../platform/sessionStorage";
-import type { AuthMode, AuthResponse, StoredSession, UserRole } from "../types/domain";
+import type { ApiRequest } from "../types/api";
+import type {
+  AuthMode,
+  AuthResponse,
+  StoredSession,
+  UserRole,
+} from "../types/domain";
 import {
   authErrorMessage,
   validateAuthForm,
 } from "../utils/authUtils";
-
-type ApiRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 type SubmitOptions = {
   request: ApiRequest;
@@ -71,7 +75,10 @@ export function useAuthSession() {
   }, []);
 
   const applyAuthenticatedSession = useCallback(
-    async (auth: AuthResponse, onAuthenticated: SubmitOptions["onAuthenticated"]) => {
+    async (
+      auth: AuthResponse,
+      onAuthenticated: SubmitOptions["onAuthenticated"],
+    ) => {
       setToken(auth.accessToken);
       setUserName(auth.user.displayName);
       setCurrentUserRole(auth.user.role ?? "PLAYER");
@@ -88,7 +95,7 @@ export function useAuthSession() {
     [],
   );
 
-  function switchAuthMode(nextMode: AuthMode) {
+  const switchAuthMode = useCallback((nextMode: AuthMode) => {
     if (nextMode === authMode) {
       return;
     }
@@ -98,51 +105,54 @@ export function useAuthSession() {
     setPasswordState("");
     setDisplayNameState("");
     setAuthError(null);
-  }
+  }, [authMode]);
 
-  async function submitAuth({ request, onAuthenticated }: SubmitOptions) {
-    const normalizedEmail = email.trim();
-    const validationError = validateAuthForm({
-      authMode,
-      displayName,
-      email: normalizedEmail,
-      password,
-    });
-
-    if (validationError) {
-      setAuthError(validationError);
-      return;
-    }
-
-    setAuthError(null);
-    try {
-      const path =
-        authMode === "login" ? "/api/auth/login" : "/api/auth/register";
-      const body =
-        authMode === "login"
-          ? { email: normalizedEmail, password }
-          : {
-              email: normalizedEmail,
-              password,
-              displayName: displayName.trim(),
-            };
-      const auth = await request<AuthResponse>(path, {
-        method: "POST",
-        body: JSON.stringify(body),
+  const submitAuth = useCallback(
+    async ({ request, onAuthenticated }: SubmitOptions) => {
+      const normalizedEmail = email.trim();
+      const validationError = validateAuthForm({
+        authMode,
+        displayName,
+        email: normalizedEmail,
+        password,
       });
 
-      await applyAuthenticatedSession(auth, onAuthenticated);
-    } catch (error) {
-      const message = authErrorMessage(error, authMode);
-      setAuthError(message);
-    }
-  }
+      if (validationError) {
+        setAuthError(validationError);
+        return;
+      }
 
-  async function submitGoogleToken({
+      setAuthError(null);
+      try {
+        const path =
+          authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+        const body =
+          authMode === "login"
+            ? { email: normalizedEmail, password }
+            : {
+                email: normalizedEmail,
+                password,
+                displayName: displayName.trim(),
+              };
+        const auth = await request<AuthResponse>(path, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+
+        await applyAuthenticatedSession(auth, onAuthenticated);
+      } catch (error) {
+        const message = authErrorMessage(error, authMode);
+        setAuthError(message);
+      }
+    },
+    [applyAuthenticatedSession, authMode, displayName, email, password],
+  );
+
+  const submitGoogleToken = useCallback(async ({
     request,
     onAuthenticated,
     idToken,
-  }: SubmitOptions & { idToken: string }) {
+  }: SubmitOptions & { idToken: string }) => {
     try {
       const auth = await request<AuthResponse>("/api/auth/google", {
         method: "POST",
@@ -154,22 +164,22 @@ export function useAuthSession() {
         error instanceof Error ? error.message : "Error inesperado";
       throw new Error(message);
     }
-  }
+  }, [applyAuthenticatedSession]);
 
-  function setDisplayName(value: string) {
+  const setDisplayName = useCallback((value: string) => {
     setDisplayNameState(value);
     setAuthError(null);
-  }
+  }, []);
 
-  function setEmail(value: string) {
+  const setEmail = useCallback((value: string) => {
     setEmailState(value);
     setAuthError(null);
-  }
+  }, []);
 
-  function setPassword(value: string) {
+  const setPassword = useCallback((value: string) => {
     setPasswordState(value);
     setAuthError(null);
-  }
+  }, []);
 
   return {
     authMode,

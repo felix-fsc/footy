@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
+import type { ApiRequest } from "../types/api";
 import type { PlayerPosition, PlayerProfileResponse } from "../types/domain";
-
-type ApiRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 export function useProfile() {
   const [profile, setProfile] = useState<PlayerProfileResponse | null>(null);

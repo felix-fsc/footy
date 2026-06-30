@@ -227,6 +227,25 @@ export function userParticipatesInMatch(match: MatchResponse, userId: string) {
   );
 }
 
+export function getMatchViewerState(
+  match: MatchResponse | null,
+  currentUserId: string | null,
+) {
+  const isParticipant = Boolean(
+    match &&
+      currentUserId &&
+      userParticipatesInMatch(match, currentUserId),
+  );
+  const isOwner = Boolean(match && currentUserId === match.createdBy.id);
+  const isOpen = match?.status === "OPEN";
+
+  return {
+    isParticipant,
+    isOwner,
+    isOpen,
+  };
+}
+
 export function isTeamFull(match: MatchResponse, team: TeamSide) {
   const occupancy = match.occupancy;
   const max = occupancy?.maxPlayersPerTeam ?? match.maxPlayersPerTeam;

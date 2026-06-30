@@ -1,4 +1,3 @@
-import { ApiRequestError } from "../api/errors";
 import type { AuthMode } from "../types/domain";
 
 export function validateAuthForm({
@@ -37,10 +36,11 @@ export function validateAuthForm({
 }
 
 export function authErrorMessage(error: unknown, authMode: AuthMode) {
-  const status = error instanceof ApiRequestError ? error.status : null;
+  const apiError = getApiError(error);
+  const status = apiError?.status ?? null;
   const rawMessage =
-    error instanceof ApiRequestError
-      ? `${error.message} ${error.body}`
+    apiError
+      ? `${apiError.message} ${apiError.body}`
       : error instanceof Error
         ? error.message
         : String(error);
@@ -124,16 +124,43 @@ export function authErrorMessage(error: unknown, authMode: AuthMode) {
 }
 
 export function matchMutationErrorMessage(error: unknown) {
-  if (error instanceof ApiRequestError) {
-    if (error.status === 403) {
+  const apiError = getApiError(error);
+
+  if (apiError) {
+    if (apiError.status === 403) {
       return "No tienes permisos para modificar este partido.";
     }
-    if (error.status === 404 || error.status === 405) {
+    if (apiError.status === 404 || apiError.status === 405) {
       return "El backend no tiene disponible esta accion. Despliega la ultima version del backend o usa la API local actualizada.";
     }
-    if (error.status >= 500) {
+    if (apiError.status >= 500) {
       return "El servidor no pudo guardar los cambios. Intentalo de nuevo en unos minutos.";
     }
   }
   return error instanceof Error ? error.message : "Error inesperado";
+}
+
+function getApiError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+
+  const candidate = error as {
+    status?: unknown;
+    body?: unknown;
+    message?: unknown;
+  };
+
+  if (typeof candidate.status !== "number") {
+    return null;
+  }
+
+  return {
+    status: candidate.status,
+    body: typeof candidate.body === "string" ? candidate.body : "",
+    message:
+      typeof candidate.message === "string"
+        ? candidate.message
+        : `HTTP ${candidate.status}`,
+  };
 }

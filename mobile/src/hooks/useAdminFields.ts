@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { Alert } from "react-native";
+import { DEFAULT_CITY } from "../constants/locations";
+import type { ApiRequest } from "../types/api";
 import type { SavedFieldResponse } from "../types/domain";
-
-type ApiRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 type UseAdminFieldsOptions = {
   request: ApiRequest;
@@ -30,7 +30,7 @@ export function useAdminFields({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
-  const [city, setCity] = useState("Huelva");
+  const [city, setCity] = useState(DEFAULT_CITY);
   const [latitude, setLatitude] = useState("");
   const [longitude, setLongitude] = useState("");
 

@@ -15,7 +15,7 @@ export const DEFAULT_MAP_CENTER = { latitude: 37.26142, longitude: -6.94472 };
 export function getCityMapCenter(city: string | null | undefined): MapLocation {
   const normalized = (city ?? "").trim().toLowerCase();
   if (normalized.includes("huelva")) {
-    return { latitude: 37.26142, longitude: -6.94472 };
+    return DEFAULT_MAP_CENTER;
   }
   if (normalized.includes("madrid")) {
     return { latitude: 40.416775, longitude: -3.70379 };

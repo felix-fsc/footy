@@ -7,9 +7,8 @@ import type {
   MessageResponse,
   TeamSide,
 } from "../types/domain";
+import type { ApiRequest } from "../types/api";
 import { matchMutationErrorMessage } from "../utils/authUtils";
-
-type ApiRequest = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 type UseMatchActionsOptions = {
   request: ApiRequest;
