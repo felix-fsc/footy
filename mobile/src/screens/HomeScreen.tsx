@@ -15,7 +15,7 @@ import {
 import { BottomNav } from "../components/navigation/BottomNav";
 import type { HomeMode, MatchResponse } from "../types/domain";
 
-const MOBILE_EDGE_PADDING = 10;
+const MOBILE_EDGE_PADDING = 0;
 
 type HomeScreenProps = {
   actions: {
