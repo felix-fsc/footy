@@ -24,6 +24,7 @@ import {
   formatDraftPrice,
   formatPriceFromCents,
   getMatchViewerState,
+  getUpcomingRegisteredMatches,
   getVisibleMatches,
   isTeamFull,
   timeInputFromInstant,
@@ -394,6 +395,52 @@ test("filtra partidos visibles por fecha, busqueda, disponibilidad y mis partido
       now,
     }).map((item) => item.id),
     ["match-1"],
+  );
+});
+
+test("mis partidos solo incluye inscritos futuros del usuario actual", () => {
+  const futureRegistered = match({
+    id: "future-registered",
+    startsAt: "2026-06-30T20:00:00.000Z",
+  });
+  const olderRegistered = match({
+    id: "older-registered",
+    startsAt: "2026-06-29T20:00:00.000Z",
+  });
+  const futureNotRegistered = match({
+    id: "future-not-registered",
+    startsAt: "2026-06-30T21:00:00.000Z",
+    teams: {
+      teamA: [
+        {
+          participationId: "part-2",
+          userId: "user-2",
+          displayName: "Otro",
+          username: "otro",
+          teamSide: "A",
+          joinedAt: "2026-06-30T12:30:00.000Z",
+        },
+      ],
+      teamB: [],
+    },
+  });
+
+  assert.deepEqual(
+    getUpcomingRegisteredMatches({
+      matches: [futureNotRegistered, olderRegistered, futureRegistered],
+      currentUserId: "user-1",
+      now,
+    }).map((item) => item.id),
+    ["future-registered"],
+  );
+
+  assert.deepEqual(
+    getUpcomingRegisteredMatches({
+      matches: [futureRegistered],
+      currentUserId: null,
+      now,
+    }),
+    [],
   );
 });
 

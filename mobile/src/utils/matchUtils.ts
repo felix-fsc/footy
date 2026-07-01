@@ -201,6 +201,33 @@ export function getVisibleMatches({
   });
 }
 
+export function getUpcomingRegisteredMatches({
+  matches,
+  currentUserId,
+  now = new Date(),
+}: {
+  matches: MatchResponse[];
+  currentUserId: string | null;
+  now?: Date;
+}) {
+  if (!currentUserId) {
+    return [];
+  }
+
+  return matches
+    .filter((match) => {
+      const matchDate = new Date(match.startsAt);
+      const isFutureOrNow =
+        Number.isFinite(matchDate.getTime()) && matchDate >= now;
+
+      return isFutureOrNow && userParticipatesInMatch(match, currentUserId);
+    })
+    .sort(
+      (first, second) =>
+        new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime(),
+    );
+}
+
 export function isMatchOpen(match: MatchResponse) {
   return match.status === "OPEN";
 }

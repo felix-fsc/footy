@@ -50,51 +50,74 @@ export function SavedFieldsPicker({
 
   return (
     <View style={styles.savedFieldBlock}>
-      <Text style={styles.fieldLabel}>Pistas guardadas</Text>
+      <View style={styles.savedFieldHeader}>
+        <Text style={styles.fieldLabel}>Pistas guardadas</Text>
+        <Text style={styles.savedFieldHint}>Elige una pista o marca punto manual</Text>
+      </View>
       <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.savedFieldScroller}
+        style={styles.savedFieldList}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.savedFieldListContent}
       >
-        <Pressable
-          style={[
-            styles.savedFieldChip,
-            !selectedSavedFieldId && styles.savedFieldChipActive,
-          ]}
+        <SavedFieldRow
+          active={!selectedSavedFieldId}
+          title="Punto manual"
+          meta="Elegir ubicacion en el mapa"
           onPress={() => onSelectSavedField(null)}
-        >
-          <Text
-            style={[
-              styles.savedFieldChipTitle,
-              !selectedSavedFieldId && styles.savedFieldChipTitleActive,
-            ]}
-          >
-            Punto manual
-          </Text>
-          <Text style={styles.savedFieldChipMeta}>Elegir en mapa</Text>
-        </Pressable>
+        />
         {savedFields.map((field) => {
           const active = selectedSavedFieldId === field.id;
           return (
-            <Pressable
+            <SavedFieldRow
               key={field.id}
-              style={[styles.savedFieldChip, active && styles.savedFieldChipActive]}
+              active={active}
+              title={field.name}
+              meta={field.city || field.address || "Pista guardada"}
               onPress={() => onSelectSavedField(field)}
-            >
-              <Text
-                style={[styles.savedFieldChipTitle, active && styles.savedFieldChipTitleActive]}
-                numberOfLines={1}
-              >
-                {field.name}
-              </Text>
-              <Text style={styles.savedFieldChipMeta} numberOfLines={1}>
-                {field.city || field.address || "Pista guardada"}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </ScrollView>
     </View>
+  );
+}
+
+type SavedFieldRowProps = {
+  active: boolean;
+  title: string;
+  meta: string;
+  onPress: () => void;
+};
+
+function SavedFieldRow({ active, title, meta, onPress }: SavedFieldRowProps) {
+  return (
+    <Pressable
+      style={[styles.savedFieldRow, active && styles.savedFieldRowActive]}
+      onPress={onPress}
+    >
+      <View style={styles.savedFieldTextBlock}>
+        <Text
+          style={[styles.savedFieldTitle, active && styles.savedFieldTitleActive]}
+          numberOfLines={1}
+        >
+          {title}
+        </Text>
+        <Text style={styles.savedFieldMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      <View style={[styles.savedFieldState, active && styles.savedFieldStateActive]}>
+        <Text
+          style={[
+            styles.savedFieldStateText,
+            active && styles.savedFieldStateTextActive,
+          ]}
+        >
+          {active ? "Seleccionada" : "Elegir"}
+        </Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -184,33 +207,71 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  savedFieldBlock: { gap: 8 },
-  savedFieldScroller: { gap: 8, paddingRight: 4 },
-  savedFieldChip: {
-    width: 150,
-    minHeight: 64,
+  savedFieldBlock: { gap: 9 },
+  savedFieldHeader: { gap: 3 },
+  savedFieldHint: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  savedFieldList: {
+    maxHeight: 230,
+  },
+  savedFieldListContent: {
+    gap: 8,
+    paddingBottom: 2,
+  },
+  savedFieldRow: {
+    minHeight: 62,
     borderRadius: 18,
     backgroundColor: "rgba(247,241,232,0.08)",
     borderWidth: 1,
     borderColor: "rgba(247,241,232,0.12)",
-    padding: 10,
-    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  savedFieldChipActive: {
+  savedFieldRowActive: {
     backgroundColor: "rgba(127,239,155,0.18)",
     borderColor: "rgba(127,239,155,0.42)",
   },
-  savedFieldChipTitle: {
+  savedFieldTextBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  savedFieldTitle: {
     color: "#E3DBD0",
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "900",
   },
-  savedFieldChipTitleActive: { color: "#F7F1E8" },
-  savedFieldChipMeta: {
+  savedFieldTitleActive: { color: "#F7F1E8" },
+  savedFieldMeta: {
     color: "rgba(227,219,208,0.62)",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
     marginTop: 4,
+  },
+  savedFieldState: {
+    minWidth: 66,
+    borderRadius: 999,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    alignItems: "center",
+  },
+  savedFieldStateActive: {
+    backgroundColor: "#8FEA6A",
+  },
+  savedFieldStateText: {
+    color: "rgba(247,241,232,0.72)",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  savedFieldStateTextActive: {
+    color: "#0A110E",
   },
   calendarBlock: { gap: 7 },
   dateSelectorCard: {

@@ -57,7 +57,7 @@ export function AppContent() {
 
   const request = useApiRequest({ token, onUnauthorized: handleUnauthorized });
 
-  const matchesState = useMatches({ request, token });
+  const matchesState = useMatches({ request, token, currentUserId });
   const navigation = useAppNavigation({ matchDraft, matchesState });
 
   const adminFields = useAdminFields({

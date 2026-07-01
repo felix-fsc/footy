@@ -2,31 +2,45 @@ import { useCallback, useMemo, useState } from "react";
 import { fetchMatchesSnapshot } from "../api/matches";
 import type { ApiRequest } from "../types/api";
 import type { MatchResponse } from "../types/domain";
-import { getVisibleMatches } from "../utils/matchUtils";
+import {
+  getUpcomingRegisteredMatches,
+  getVisibleMatches,
+} from "../utils/matchUtils";
 
 export function useMatches({
   request,
   token,
+  currentUserId,
 }: {
   request: ApiRequest;
   token: string | null;
+  currentUserId: string | null;
 }) {
   const [matches, setMatches] = useState<MatchResponse[]>([]);
   const [myMatches, setMyMatches] = useState<MatchResponse[]>([]);
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const upcomingMyMatches = useMemo(
+    () =>
+      getUpcomingRegisteredMatches({
+        matches: myMatches,
+        currentUserId,
+      }),
+    [currentUserId, myMatches],
+  );
+
   const visibleMatches = useMemo(
     () =>
       getVisibleMatches({
         matches,
-        myMatches,
+        myMatches: upcomingMyMatches,
         searchQuery,
         matchFilter: "all",
         dateFilter: "all",
         onlyAvailable: false,
       }),
-    [matches, myMatches, searchQuery],
+    [matches, upcomingMyMatches, searchQuery],
   );
 
   const selectedMatch = selectedMatchId
@@ -61,13 +75,13 @@ export function useMatches({
 
   return {
     matches,
-    myMatches,
+    myMatches: upcomingMyMatches,
     visibleMatches,
     selectedMatch,
     selectedMatchId,
     searchQuery,
-    nextMyMatch: myMatches[0] ?? null,
-    victoryStreak: Math.max(3, Math.min(9, myMatches.length + 3)),
+    nextMyMatch: upcomingMyMatches[0] ?? null,
+    victoryStreak: Math.max(3, Math.min(9, upcomingMyMatches.length + 3)),
     setMatches,
     setMyMatches,
     setSelectedMatchId,
