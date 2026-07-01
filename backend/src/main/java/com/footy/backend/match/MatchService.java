@@ -79,6 +79,7 @@ public class MatchService {
                 request.title().trim(),
                 field,
                 request.startsAt(),
+                request.durationMinutes(),
                 request.maxPlayersPerTeam(),
                 request.pricePerPersonCents(),
                 blankToNull(request.coverImageUrl()),
@@ -98,6 +99,7 @@ public class MatchService {
                 request.title().trim(),
                 field,
                 request.startsAt(),
+                request.durationMinutes(),
                 request.maxPlayersPerTeam(),
                 request.pricePerPersonCents(),
                 blankToNull(request.coverImageUrl()));

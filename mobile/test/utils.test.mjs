@@ -21,9 +21,11 @@ import {
 } from "../src/utils/matchDraftUtils.ts";
 import {
   dateInputFromInstant,
+  formatDurationMinutes,
   formatDraftPrice,
   formatPriceFromCents,
   getMatchViewerState,
+  getPlayedRegisteredMatchesCount,
   getUpcomingRegisteredMatches,
   getVisibleMatches,
   isTeamFull,
@@ -115,10 +117,12 @@ const draft = {
   city: "  Huelva  ",
   date: "2026-07-01",
   time: "19:30",
+  durationMinutes: "90",
   maxPlayers: "5",
   pricePerPerson: "3,50",
   latitude: 37.25,
   longitude: -6.95,
+  locationMode: "manual",
   selectedSavedFieldId: null,
   coverImageUrl: "https://example.com/cover.jpg",
 };
@@ -238,6 +242,9 @@ test("formatea precios y entradas de fecha para formularios", () => {
   assert.equal(formatPriceFromCents(350), "3.50 EUR");
   assert.equal(formatDraftPrice("0"), "Gratis");
   assert.equal(formatDraftPrice("3,5"), "3.50 EUR");
+  assert.equal(formatDurationMinutes(45), "45 min");
+  assert.equal(formatDurationMinutes(90), "1 h 30 min");
+  assert.equal(formatDurationMinutes(null), "1 h 30 min");
   assert.equal(dateInputFromInstant("2026-07-01T19:30:00.000Z"), "2026-07-01");
   assert.match(timeInputFromInstant("2026-07-01T19:30:00.000Z"), /^\d{2}:\d{2}$/);
   assert.equal(timeInputFromInstant("fecha mala"), "19:00");
@@ -263,12 +270,14 @@ test("valida y normaliza el borrador de un partido", () => {
 
   assert.deepEqual(validation, {
     ok: true,
+    durationMinutes: 90,
     maxPlayers: 5,
     pricePerPersonCents: 350,
   });
 
   const body = buildMatchRequestBody(draft, validation);
   assert.equal(body.title, "Partido de tarde");
+  assert.equal(body.durationMinutes, 90);
   assert.equal(body.maxPlayersPerTeam, 5);
   assert.equal(body.pricePerPersonCents, 350);
   assert.equal(body.fieldId, null);
@@ -312,6 +321,29 @@ test("rechaza borradores de partido incompletos o fuera de rango", () => {
   assert.deepEqual(
     validateMatchDraftValues({
       ...draft,
+      locationMode: "saved",
+      selectedSavedFieldId: null,
+    }),
+    {
+      ok: false,
+      title: "Elige una pista",
+      message: "Selecciona una pista guardada o cambia a ubicacion manual.",
+    },
+  );
+  assert.deepEqual(
+    validateMatchDraftValues({
+      ...draft,
+      durationMinutes: "15",
+    }),
+    {
+      ok: false,
+      title: "Revisa la duracion",
+      message: "La duracion debe estar entre 30 y 240 minutos.",
+    },
+  );
+  assert.deepEqual(
+    validateMatchDraftValues({
+      ...draft,
       maxPlayers: "12",
     }),
     {
@@ -339,6 +371,7 @@ test("convierte una respuesta de partido a valores editables", () => {
     fieldName: "Campo Municipal Saladillo",
     address: "Calle Hermanos Alvarez Quintero 13",
     city: "Huelva",
+    durationMinutes: "90",
     maxPlayers: "5",
     pricePerPerson: "3.50",
   });
@@ -441,6 +474,15 @@ test("mis partidos solo incluye inscritos futuros del usuario actual", () => {
       now,
     }),
     [],
+  );
+
+  assert.equal(
+    getPlayedRegisteredMatchesCount({
+      matches: [futureNotRegistered, olderRegistered, futureRegistered],
+      currentUserId: "user-1",
+      now,
+    }),
+    1,
   );
 });
 

@@ -93,6 +93,7 @@ public class DemoDataInitializer implements ApplicationRunner {
                     demoMatch.title(),
                     field,
                     startsAt,
+                    Match.DEFAULT_DURATION_MINUTES,
                     demoMatch.maxPlayersPerTeam(),
                     demoMatch.pricePerPersonCents(),
                     demoMatch.coverImageUrl(),

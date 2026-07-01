@@ -14,6 +14,7 @@ import jakarta.validation.constraints.Size;
 public record CreateMatchRequest(
         @NotBlank @Size(max = 120) String title,
         @NotNull @Future Instant startsAt,
+        @Min(30) @Max(240) Integer durationMinutes,
         @Min(1) @Max(11) int maxPlayersPerTeam,
         @Min(0) @Max(10000) int pricePerPersonCents,
         @Size(max = 500) String coverImageUrl,

@@ -3,6 +3,7 @@ import { fetchMatchesSnapshot } from "../api/matches";
 import type { ApiRequest } from "../types/api";
 import type { MatchResponse } from "../types/domain";
 import {
+  getPlayedRegisteredMatchesCount,
   getUpcomingRegisteredMatches,
   getVisibleMatches,
 } from "../utils/matchUtils";
@@ -24,6 +25,15 @@ export function useMatches({
   const upcomingMyMatches = useMemo(
     () =>
       getUpcomingRegisteredMatches({
+        matches: myMatches,
+        currentUserId,
+      }),
+    [currentUserId, myMatches],
+  );
+
+  const playedMatchesCount = useMemo(
+    () =>
+      getPlayedRegisteredMatchesCount({
         matches: myMatches,
         currentUserId,
       }),
@@ -81,7 +91,7 @@ export function useMatches({
     selectedMatchId,
     searchQuery,
     nextMyMatch: upcomingMyMatches[0] ?? null,
-    victoryStreak: Math.max(3, Math.min(9, upcomingMyMatches.length + 3)),
+    playedMatchesCount,
     setMatches,
     setMyMatches,
     setSelectedMatchId,

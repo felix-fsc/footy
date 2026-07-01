@@ -22,6 +22,7 @@ import jakarta.persistence.Table;
 @Entity
 @Table(name = "football_matches")
 public class Match extends AuditableEntity {
+    public static final int DEFAULT_DURATION_MINUTES = 90;
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -36,6 +37,9 @@ public class Match extends AuditableEntity {
 
     @Column(nullable = false)
     private Instant startsAt;
+
+    @Column(nullable = false, columnDefinition = "integer default 90")
+    private int durationMinutes = DEFAULT_DURATION_MINUTES;
 
     @Column(nullable = false)
     private int maxPlayersPerTeam;
@@ -57,20 +61,22 @@ public class Match extends AuditableEntity {
     protected Match() {
     }
 
-    public Match(String title, Field field, Instant startsAt, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl, User createdBy) {
+    public Match(String title, Field field, Instant startsAt, Integer durationMinutes, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl, User createdBy) {
         this.title = title;
         this.field = field;
         this.startsAt = startsAt;
+        this.durationMinutes = normalizeDurationMinutes(durationMinutes);
         this.maxPlayersPerTeam = maxPlayersPerTeam;
         this.pricePerPersonCents = pricePerPersonCents;
         this.coverImageUrl = coverImageUrl;
         this.createdBy = createdBy;
     }
 
-    public void updateDetails(String title, Field field, Instant startsAt, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl) {
+    public void updateDetails(String title, Field field, Instant startsAt, Integer durationMinutes, int maxPlayersPerTeam, int pricePerPersonCents, String coverImageUrl) {
         this.title = title;
         this.field = field;
         this.startsAt = startsAt;
+        this.durationMinutes = normalizeDurationMinutes(durationMinutes);
         this.maxPlayersPerTeam = maxPlayersPerTeam;
         this.pricePerPersonCents = pricePerPersonCents;
         this.coverImageUrl = coverImageUrl;
@@ -90,6 +96,10 @@ public class Match extends AuditableEntity {
 
     public Instant getStartsAt() {
         return startsAt;
+    }
+
+    public int getDurationMinutes() {
+        return durationMinutes;
     }
 
     public int getMaxPlayersPerTeam() {
@@ -130,5 +140,9 @@ public class Match extends AuditableEntity {
 
     public void reopen() {
         this.status = MatchStatus.OPEN;
+    }
+
+    private int normalizeDurationMinutes(Integer value) {
+        return value == null ? DEFAULT_DURATION_MINUTES : value;
     }
 }

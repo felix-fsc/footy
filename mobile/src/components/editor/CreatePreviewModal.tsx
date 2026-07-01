@@ -4,6 +4,7 @@ import { formatDraftPrice } from "../../utils/matchUtils";
 type CreatePreviewModalProps = {
   city: string;
   date: string;
+  durationMinutes: string;
   editing: boolean;
   fieldName: string;
   latitude: number;
@@ -25,6 +26,7 @@ export function CreatePreviewModal({
   fieldName,
   city,
   date,
+  durationMinutes,
   time,
   players,
   pricePerPerson,
@@ -49,6 +51,7 @@ export function CreatePreviewModal({
           </Text>
           <View style={styles.previewInfoGrid}>
             <PreviewInfo label="Fecha" value={`${date} - ${time}`} />
+            <PreviewInfo label="Duracion" value={`${durationMinutes} min`} />
             <PreviewInfo label="Formato" value={`${players} vs ${players}`} />
             <PreviewInfo
               label="Precio"

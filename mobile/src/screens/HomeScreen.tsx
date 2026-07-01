@@ -34,7 +34,7 @@ type HomeScreenProps = {
     selectedMatch: MatchResponse | null;
     selectedMatchId: string | null;
     userCity: string;
-    victoryStreak: number;
+    playedMatchesCount: number;
   };
   layout: {
     topInset: number;
@@ -65,7 +65,7 @@ export function HomeScreen({
     selectedMatch,
     selectedMatchId,
     userCity,
-    victoryStreak,
+    playedMatchesCount,
   } = data;
   const { homeMode } = view;
 
@@ -76,7 +76,7 @@ export function HomeScreen({
       <View style={[styles.homeShell, { paddingTop: layout.topInset }]}>
         <View style={styles.homeContent}>
           <View style={styles.homeHeader}>
-            <HomeHero victoryStreak={victoryStreak} />
+            <HomeHero playedMatchesCount={playedMatchesCount} />
           </View>
 
           <View style={styles.homeSearchWrap}>

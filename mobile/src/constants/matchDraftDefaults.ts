@@ -7,6 +7,7 @@ export const DEFAULT_MATCH_DRAFT = {
   address: "Calle Hermanos Alvarez Quintero 13",
   city: DEFAULT_CITY,
   time: "19:00",
+  durationMinutes: "90",
   maxPlayers: "5",
   pricePerPerson: "3.50",
   latitude: DEFAULT_MAP_CENTER.latitude,

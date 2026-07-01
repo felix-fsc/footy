@@ -13,7 +13,7 @@ import { ListHome } from "../matches/ListHome";
 import { ModeButton } from "../ui/ModeButton";
 import type { HomeMode, MatchResponse } from "../../types/domain";
 
-export function HomeHero({ victoryStreak }: { victoryStreak: number }) {
+export function HomeHero({ playedMatchesCount }: { playedMatchesCount: number }) {
   return (
     <View style={styles.homeHeroBanner}>
       <View style={styles.homeBannerCircleOne} />
@@ -29,8 +29,8 @@ export function HomeHero({ victoryStreak }: { victoryStreak: number }) {
           </Text>
         </View>
         <View style={styles.homeStreakPill}>
-          <Text style={styles.homeStreakNumber}>{victoryStreak}</Text>
-          <Text style={styles.homeStreakText}>racha</Text>
+          <Text style={styles.homeStreakNumber}>{playedMatchesCount}</Text>
+          <Text style={styles.homeStreakText}>jugados</Text>
         </View>
       </View>
     </View>
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   homeStreakNumber: { color: "#0A110E", fontSize: 16, fontWeight: "900" },
   homeStreakText: {
     color: "#0A110E",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "900",
     marginTop: -3,
   },

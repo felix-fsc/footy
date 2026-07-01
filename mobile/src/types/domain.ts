@@ -3,6 +3,7 @@ export type HomeMode = "map" | "list";
 export type MatchFilter = "all" | "mine";
 export type DateFilter = "today" | "tomorrow" | "week" | "all";
 export type AppTab = "home" | "create" | "detail" | "profile" | "location";
+export type MatchLocationMode = "manual" | "saved";
 export type TeamSide = "A" | "B";
 export type UserRole = "PLAYER" | "ADMIN";
 export type PlayerPosition =
@@ -47,6 +48,7 @@ export type MatchResponse = {
   id: string;
   title: string;
   startsAt: string;
+  durationMinutes?: number | null;
   maxPlayersPerTeam: number;
   pricePerPersonCents: number;
   coverImageUrl?: string | null;

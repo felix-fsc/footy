@@ -9,6 +9,7 @@ public record MatchResponse(
         UUID id,
         String title,
         Instant startsAt,
+        int durationMinutes,
         int maxPlayersPerTeam,
         int pricePerPersonCents,
         String coverImageUrl,

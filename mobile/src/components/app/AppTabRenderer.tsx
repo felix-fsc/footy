@@ -120,7 +120,7 @@ export function AppTabRenderer({
           profile: profileState.profile,
           userName,
           username: profileState.username,
-          victoryStreak: matchesState.victoryStreak,
+          playedMatchesCount: matchesState.playedMatchesCount,
         }}
       />
     );
@@ -151,7 +151,9 @@ export function AppTabRenderer({
             : navigation.goHome,
           onClosePreview: viewActions.closePreview,
           onDateChange: matchDraft.setDate,
+          onDurationMinutesChange: matchDraft.setDurationMinutes,
           onFieldNameChange: matchDraft.setFieldName,
+          onLocationModeChange: matchDraft.setLocationMode,
           onMaxPlayersChange: matchDraft.setMaxPlayers,
           onOpenLocationPicker: navigation.openLocationPicker,
           onOpenPreview: matchEditorActions.openCreatePreview,
@@ -165,9 +167,11 @@ export function AppTabRenderer({
         draft={{
           city: matchDraft.city,
           date: matchDraft.date,
+          durationMinutes: matchDraft.durationMinutes,
           fieldName: matchDraft.fieldName,
           latitude: matchDraft.latitude,
           longitude: matchDraft.longitude,
+          locationMode: matchDraft.locationMode,
           maxPlayers: matchDraft.maxPlayers,
           pricePerPerson: matchDraft.pricePerPerson,
           selectedSavedFieldId: matchDraft.selectedSavedFieldId,
@@ -263,7 +267,7 @@ export function AppTabRenderer({
         selectedMatch: matchesState.selectedMatch,
         selectedMatchId: matchesState.selectedMatchId,
         userCity,
-        victoryStreak: matchesState.victoryStreak,
+        playedMatchesCount: matchesState.playedMatchesCount,
       }}
       layout={{
         topInset,

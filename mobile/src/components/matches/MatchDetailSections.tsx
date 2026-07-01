@@ -4,6 +4,7 @@ import { StatusBadge } from "../ui/FormControls";
 import type { MatchResponse, MessageResponse, TeamSide } from "../../types/domain";
 import {
   formatDate,
+  formatDurationMinutes,
   formatPriceFromCents,
   isTeamFull,
   publicHandle,
@@ -82,6 +83,12 @@ export function MatchInfoCards({ match }: { match: MatchResponse }) {
         <Text style={styles.detailInfoLabel}>Formato</Text>
         <Text style={styles.detailInfoValue}>
           {match.maxPlayersPerTeam} vs {match.maxPlayersPerTeam}
+        </Text>
+      </View>
+      <View style={styles.detailInfoCard}>
+        <Text style={styles.detailInfoLabel}>Duracion</Text>
+        <Text style={styles.detailInfoValue}>
+          {formatDurationMinutes(match.durationMinutes)}
         </Text>
       </View>
     </View>

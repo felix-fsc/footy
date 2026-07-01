@@ -15,14 +15,20 @@ import {
 } from "../components/editor/CreateMatchSections";
 import { CreatePreviewModal } from "../components/editor/CreatePreviewModal";
 import { BottomNav } from "../components/navigation/BottomNav";
-import type { MatchResponse, SavedFieldResponse } from "../types/domain";
+import type {
+  MatchLocationMode,
+  MatchResponse,
+  SavedFieldResponse,
+} from "../types/domain";
 
 type CreateMatchScreenProps = {
   actions: {
     onClose: () => void;
     onClosePreview: () => void;
     onDateChange: (value: string) => void;
+    onDurationMinutesChange: (value: string) => void;
     onFieldNameChange: (value: string) => void;
+    onLocationModeChange: (mode: MatchLocationMode) => void;
     onMaxPlayersChange: (value: string) => void;
     onOpenLocationPicker: () => void;
     onOpenPreview: () => void;
@@ -36,9 +42,11 @@ type CreateMatchScreenProps = {
   draft: {
     city: string;
     date: string;
+    durationMinutes: string;
     fieldName: string;
     latitude: number;
     longitude: number;
+    locationMode: MatchLocationMode;
     maxPlayers: string;
     pricePerPerson: string;
     selectedSavedFieldId: string | null;
@@ -74,9 +82,11 @@ export function CreateMatchScreen({
   const {
     city,
     date,
+    durationMinutes,
     fieldName,
     latitude,
     longitude,
+    locationMode,
     maxPlayers,
     pricePerPerson,
     selectedSavedFieldId,
@@ -136,11 +146,13 @@ export function CreateMatchScreen({
         <CreateMatchForm
           city={city}
           date={date}
+          durationMinutes={durationMinutes}
           editingMatchId={editingMatchId}
           fieldName={fieldName}
           latitude={latitude}
           loading={loading}
           longitude={longitude}
+          locationMode={locationMode}
           maxPlayers={maxPlayers}
           pricePerPerson={pricePerPerson}
           savedFields={savedFields}
@@ -149,7 +161,9 @@ export function CreateMatchScreen({
           time={time}
           title={title}
           onDateChange={actions.onDateChange}
+          onDurationMinutesChange={actions.onDurationMinutesChange}
           onFieldNameChange={actions.onFieldNameChange}
+          onLocationModeChange={actions.onLocationModeChange}
           onMaxPlayersChange={actions.onMaxPlayersChange}
           onOpenLocationPicker={actions.onOpenLocationPicker}
           onOpenPreview={actions.onOpenPreview}
@@ -168,6 +182,7 @@ export function CreateMatchScreen({
         city={city}
         date={date}
         time={time}
+        durationMinutes={durationMinutes}
         players={maxPlayers}
         pricePerPerson={pricePerPerson}
         latitude={latitude}

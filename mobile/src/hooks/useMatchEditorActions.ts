@@ -41,10 +41,12 @@ export function useMatchEditorActions({
     city,
     date,
     time,
+    durationMinutes,
     maxPlayers,
     pricePerPerson,
     latitude,
     longitude,
+    locationMode,
     selectedSavedFieldId,
     editingMatchId,
     setShowPreview,
@@ -57,8 +59,11 @@ export function useMatchEditorActions({
       fieldName,
       date,
       time,
+      durationMinutes,
       maxPlayers,
       pricePerPerson,
+      locationMode,
+      selectedSavedFieldId,
     });
 
     if (!validation.ok) {
@@ -73,9 +78,12 @@ export function useMatchEditorActions({
     return validation;
   }, [
     date,
+    durationMinutes,
     fieldName,
+    locationMode,
     maxPlayers,
     pricePerPerson,
+    selectedSavedFieldId,
     showFeedback,
     time,
     title,
@@ -104,10 +112,12 @@ export function useMatchEditorActions({
           city,
           date,
           time,
+          durationMinutes,
           maxPlayers,
           pricePerPerson,
           latitude,
           longitude,
+          locationMode,
           selectedSavedFieldId,
           coverImageUrl:
             (editingMatchId && selectedMatch?.coverImageUrl) ||
@@ -150,9 +160,11 @@ export function useMatchEditorActions({
     city,
     clearEditing,
     date,
+    durationMinutes,
     editingMatchId,
     fieldName,
     latitude,
+    locationMode,
     loadMatches,
     longitude,
     maxPlayers,

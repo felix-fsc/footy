@@ -1,10 +1,13 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { SavedFieldResponse } from "../../types/domain";
+import type { MatchLocationMode } from "../../types/domain";
 import { platformShadow } from "../../utils/styleUtils";
 import { Field } from "../ui/FormControls";
 import {
   DateSection,
+  DurationSection,
   LocationSummary,
+  LocationModePicker,
   PlayersSection,
   SavedFieldsPicker,
   TimeWheel,
@@ -14,11 +17,13 @@ export { EditMatchBanner } from "./EditMatchBanner";
 type CreateMatchFormProps = {
   city: string;
   date: string;
+  durationMinutes: string;
   editingMatchId: string | null;
   fieldName: string;
   latitude: number;
   loading: boolean;
   longitude: number;
+  locationMode: MatchLocationMode;
   maxPlayers: string;
   pricePerPerson: string;
   savedFields: SavedFieldResponse[];
@@ -27,7 +32,9 @@ type CreateMatchFormProps = {
   time: string;
   title: string;
   onDateChange: (value: string) => void;
+  onDurationMinutesChange: (value: string) => void;
   onFieldNameChange: (value: string) => void;
+  onLocationModeChange: (mode: MatchLocationMode) => void;
   onMaxPlayersChange: (value: string) => void;
   onOpenLocationPicker: () => void;
   onOpenPreview: () => void;
@@ -40,11 +47,13 @@ type CreateMatchFormProps = {
 
 export function CreateMatchForm({
   date,
+  durationMinutes,
   editingMatchId,
   fieldName,
   latitude,
   loading,
   longitude,
+  locationMode,
   maxPlayers,
   pricePerPerson,
   savedFields,
@@ -53,7 +62,9 @@ export function CreateMatchForm({
   time,
   title,
   onDateChange,
+  onDurationMinutesChange,
   onFieldNameChange,
+  onLocationModeChange,
   onMaxPlayersChange,
   onOpenLocationPicker,
   onOpenPreview,
@@ -79,17 +90,25 @@ export function CreateMatchForm({
         onChangeText={onFieldNameChange}
         placeholder="Nombre del campo"
       />
-      <LocationSummary
-        latitude={latitude}
-        longitude={longitude}
-        selectedSavedFieldId={selectedSavedFieldId}
-        onOpenLocationPicker={onOpenLocationPicker}
+      <LocationModePicker
+        locationMode={locationMode}
+        savedFieldsCount={savedFields.length}
+        onLocationModeChange={onLocationModeChange}
       />
-      <SavedFieldsPicker
-        savedFields={savedFields}
-        selectedSavedFieldId={selectedSavedFieldId}
-        onSelectSavedField={onSelectSavedField}
-      />
+      {locationMode === "manual" ? (
+        <LocationSummary
+          latitude={latitude}
+          longitude={longitude}
+          selectedSavedFieldId={selectedSavedFieldId}
+          onOpenLocationPicker={onOpenLocationPicker}
+        />
+      ) : (
+        <SavedFieldsPicker
+          savedFields={savedFields}
+          selectedSavedFieldId={selectedSavedFieldId}
+          onSelectSavedField={onSelectSavedField}
+        />
+      )}
       <DateSection
         date={date}
         showCalendar={showCalendar}
@@ -97,6 +116,10 @@ export function CreateMatchForm({
         onToggleCalendar={onToggleCalendar}
       />
       <TimeWheel value={time} onChange={onTimeChange} />
+      <DurationSection
+        durationMinutes={durationMinutes}
+        onDurationMinutesChange={onDurationMinutesChange}
+      />
       <PlayersSection maxPlayers={maxPlayers} onMaxPlayersChange={onMaxPlayersChange} />
       <Field
         label="Precio por persona"

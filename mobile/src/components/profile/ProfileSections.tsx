@@ -18,7 +18,7 @@ type ProfileHeroProps = {
   profileEditing: boolean;
   profilePosition: PlayerPosition;
   userName: string | null;
-  victoryStreak: number;
+  playedMatchesCount: number;
   onToggleEditing: () => void;
 };
 
@@ -29,7 +29,7 @@ export function ProfileHero({
   profileEditing,
   profilePosition,
   userName,
-  victoryStreak,
+  playedMatchesCount,
   onToggleEditing,
 }: ProfileHeroProps) {
   return (
@@ -69,10 +69,10 @@ export function ProfileHero({
         <View style={styles.streakCircleLarge} />
         <View style={styles.streakCircleSmall} />
         <View style={styles.streakTextBlock}>
-          <Text style={styles.streakLabel}>Racha de victorias</Text>
-          <Text style={styles.streakSubLabel}>Sigue sumando partidos</Text>
+          <Text style={styles.streakLabel}>Partidos jugados</Text>
+          <Text style={styles.streakSubLabel}>Historial de partidos inscritos</Text>
         </View>
-        <Text style={styles.streakNumber}>{victoryStreak}</Text>
+        <Text style={styles.streakNumber}>{playedMatchesCount}</Text>
       </View>
     </View>
   );
@@ -252,16 +252,16 @@ export function ProfileEditor({
 }
 
 export function ProfileStatsRow({
-  matchesCount,
-  victoryStreak,
+  upcomingMatchesCount,
+  playedMatchesCount,
 }: {
-  matchesCount: number;
-  victoryStreak: number;
+  upcomingMatchesCount: number;
+  playedMatchesCount: number;
 }) {
   return (
     <View style={styles.profileStats}>
-      <ProfileStat value={matchesCount} label="Partidos" />
-      <ProfileStat value={victoryStreak} label="Racha" />
+      <ProfileStat value={upcomingMatchesCount} label="Proximos" />
+      <ProfileStat value={playedMatchesCount} label="Jugados" />
       <ProfileStat value="84%" label="Asistencia" />
     </View>
   );

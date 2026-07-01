@@ -71,7 +71,7 @@ type ProfileScreenProps = {
     profile: PlayerProfileResponse | null;
     userName: string | null;
     username: string;
-    victoryStreak: number;
+    playedMatchesCount: number;
   };
   profileActions: {
     onBioChange: (value: string) => void;
@@ -105,7 +105,7 @@ export function ProfileScreen({
     profile,
     userName,
     username: profileUsername,
-    victoryStreak,
+    playedMatchesCount,
   } = profileData;
   const [fieldToDelete, setFieldToDelete] = useState<SavedFieldResponse | null>(
     null,
@@ -141,7 +141,7 @@ export function ProfileScreen({
           profileEditing={profileEditing}
           profilePosition={profilePosition}
           userName={userName}
-          victoryStreak={victoryStreak}
+          playedMatchesCount={playedMatchesCount}
           onToggleEditing={profileActions.onToggleEditing}
         />
 
@@ -178,7 +178,10 @@ export function ProfileScreen({
           />
         ) : null}
 
-        <ProfileStatsRow matchesCount={myMatches.length} victoryStreak={victoryStreak} />
+        <ProfileStatsRow
+          upcomingMatchesCount={myMatches.length}
+          playedMatchesCount={playedMatchesCount}
+        />
         <NextMatchCard nextMyMatch={nextMyMatch} onOpenMatch={navigation.onOpenMatch} />
         <MyMatchesSection matches={myMatches} onOpenMatch={navigation.onOpenMatch} />
       </ScrollView>

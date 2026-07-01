@@ -1,5 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import type { SavedFieldResponse } from "../../types/domain";
+import type { MatchLocationMode, SavedFieldResponse } from "../../types/domain";
 import { MapPickerIcon } from "../icons/AppIcons";
 import { QuickChip } from "../ui/FormControls";
 import { CalendarPicker, TimeWheel } from "./MatchEditorControls";
@@ -30,6 +30,87 @@ export function LocationSummary({
         <MapPickerIcon />
       </Pressable>
     </View>
+  );
+}
+
+type LocationModePickerProps = {
+  locationMode: MatchLocationMode;
+  savedFieldsCount: number;
+  onLocationModeChange: (mode: MatchLocationMode) => void;
+};
+
+export function LocationModePicker({
+  locationMode,
+  savedFieldsCount,
+  onLocationModeChange,
+}: LocationModePickerProps) {
+  return (
+    <View style={styles.locationModeBlock}>
+      <Text style={styles.fieldLabel}>Ubicacion del partido</Text>
+      <View style={styles.locationModeGrid}>
+        <LocationModeCard
+          active={locationMode === "manual"}
+          title="Usar ubicacion"
+          meta="Elegir punto en el mapa"
+          onPress={() => onLocationModeChange("manual")}
+        />
+        <LocationModeCard
+          active={locationMode === "saved"}
+          title="Pista guardada"
+          meta={
+            savedFieldsCount > 0
+              ? `${savedFieldsCount} pistas disponibles`
+              : "No hay pistas guardadas"
+          }
+          disabled={savedFieldsCount === 0}
+          onPress={() => onLocationModeChange("saved")}
+        />
+      </View>
+    </View>
+  );
+}
+
+type LocationModeCardProps = {
+  active: boolean;
+  disabled?: boolean;
+  title: string;
+  meta: string;
+  onPress: () => void;
+};
+
+function LocationModeCard({
+  active,
+  disabled,
+  title,
+  meta,
+  onPress,
+}: LocationModeCardProps) {
+  return (
+    <Pressable
+      style={[
+        styles.locationModeCard,
+        active && styles.locationModeCardActive,
+        disabled && styles.locationModeCardDisabled,
+      ]}
+      onPress={onPress}
+      disabled={disabled}
+    >
+      <View style={[styles.locationModeDot, active && styles.locationModeDotActive]}>
+        {active ? <View style={styles.locationModeDotCore} /> : null}
+      </View>
+      <Text
+        style={[
+          styles.locationModeTitle,
+          active && styles.locationModeTitleActive,
+        ]}
+        numberOfLines={1}
+      >
+        {title}
+      </Text>
+      <Text style={styles.locationModeMeta} numberOfLines={2}>
+        {meta}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -175,10 +256,85 @@ export function PlayersSection({
   );
 }
 
+type DurationSectionProps = {
+  durationMinutes: string;
+  onDurationMinutesChange: (value: string) => void;
+};
+
+export function DurationSection({
+  durationMinutes,
+  onDurationMinutesChange,
+}: DurationSectionProps) {
+  return (
+    <View style={styles.choiceBlock}>
+      <Text style={styles.fieldLabel}>Duracion</Text>
+      <View style={styles.quickChipRow}>
+        {["45", "60", "90", "120"].map((minutes) => (
+          <QuickChip
+            key={minutes}
+            label={`${minutes} min`}
+            active={durationMinutes === minutes}
+            onPress={() => onDurationMinutesChange(minutes)}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export { TimeWheel };
 
 const styles = StyleSheet.create({
   fieldLabel: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
+  locationModeBlock: { gap: 8 },
+  locationModeGrid: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  locationModeCard: {
+    flex: 1,
+    minHeight: 92,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    padding: 12,
+    gap: 7,
+    justifyContent: "center",
+  },
+  locationModeCardActive: {
+    backgroundColor: "rgba(127,239,155,0.18)",
+    borderColor: "rgba(127,239,155,0.42)",
+  },
+  locationModeCardDisabled: { opacity: 0.46 },
+  locationModeDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: "rgba(247,241,232,0.34)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locationModeDotActive: { borderColor: "#8FEA6A" },
+  locationModeDotCore: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#8FEA6A",
+  },
+  locationModeTitle: {
+    color: "#E3DBD0",
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  locationModeTitleActive: { color: "#F7F1E8" },
+  locationModeMeta: {
+    color: "rgba(227,219,208,0.62)",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 15,
+  },
   locationCreateCard: {
     borderRadius: 20,
     backgroundColor: "rgba(247,241,232,0.10)",

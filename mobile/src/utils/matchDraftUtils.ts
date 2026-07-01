@@ -1,4 +1,4 @@
-import type { MatchResponse } from "../types/domain";
+import type { MatchLocationMode, MatchResponse } from "../types/domain";
 
 export type MatchDraftValues = {
   title: string;
@@ -7,10 +7,12 @@ export type MatchDraftValues = {
   city: string;
   date: string;
   time: string;
+  durationMinutes: string;
   maxPlayers: string;
   pricePerPerson: string;
   latitude: number;
   longitude: number;
+  locationMode: MatchLocationMode;
   selectedSavedFieldId: string | null;
   coverImageUrl: string;
 };
@@ -18,6 +20,7 @@ export type MatchDraftValues = {
 export type MatchDraftValidation =
   | {
       ok: true;
+      durationMinutes: number;
       maxPlayers: number;
       pricePerPersonCents: number;
     }
@@ -32,17 +35,49 @@ export function validateMatchDraftValues({
   fieldName,
   date,
   time,
+  durationMinutes,
   maxPlayers,
   pricePerPerson,
+  locationMode,
+  selectedSavedFieldId,
 }: Pick<
   MatchDraftValues,
-  "title" | "fieldName" | "date" | "time" | "maxPlayers" | "pricePerPerson"
+  | "title"
+  | "fieldName"
+  | "date"
+  | "time"
+  | "durationMinutes"
+  | "maxPlayers"
+  | "pricePerPerson"
+  | "locationMode"
+  | "selectedSavedFieldId"
 >): MatchDraftValidation {
   if (!title.trim() || !fieldName.trim() || !date.trim() || !time.trim()) {
     return {
       ok: false,
       title: "Faltan datos",
       message: "Completa titulo, campo, fecha y hora.",
+    };
+  }
+
+  if (locationMode === "saved" && !selectedSavedFieldId) {
+    return {
+      ok: false,
+      title: "Elige una pista",
+      message: "Selecciona una pista guardada o cambia a ubicacion manual.",
+    };
+  }
+
+  const durationValue = Number(durationMinutes);
+  if (
+    !Number.isInteger(durationValue) ||
+    durationValue < 30 ||
+    durationValue > 240
+  ) {
+    return {
+      ok: false,
+      title: "Revisa la duracion",
+      message: "La duracion debe estar entre 30 y 240 minutos.",
     };
   }
 
@@ -70,6 +105,7 @@ export function validateMatchDraftValues({
 
   return {
     ok: true,
+    durationMinutes: durationValue,
     maxPlayers: maxPlayersValue,
     pricePerPersonCents: Math.round(priceValue * 100),
   };
@@ -82,6 +118,7 @@ export function buildMatchRequestBody(
   return {
     title: values.title.trim(),
     startsAt: new Date(`${values.date}T${values.time}:00`).toISOString(),
+    durationMinutes: validation.durationMinutes,
     maxPlayersPerTeam: validation.maxPlayers,
     pricePerPersonCents: validation.pricePerPersonCents,
     coverImageUrl: values.coverImageUrl,
@@ -104,6 +141,7 @@ export function draftValuesFromMatch(match: MatchResponse) {
     fieldName: match.field?.name ?? "Campo por confirmar",
     address: match.field?.address ?? "",
     city: match.field?.city ?? "",
+    durationMinutes: String(match.durationMinutes ?? 90),
     maxPlayers: String(match.maxPlayersPerTeam),
     pricePerPerson: (match.pricePerPersonCents / 100).toFixed(2),
   };

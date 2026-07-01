@@ -70,6 +70,21 @@ export function formatDraftPrice(value: string) {
   return `${price.toFixed(2)} EUR`;
 }
 
+export function formatDurationMinutes(value: number | null | undefined) {
+  const minutes = value ?? 90;
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  if (remainingMinutes === 0) {
+    return `${hours} h`;
+  }
+
+  return `${hours} h ${remainingMinutes} min`;
+}
+
 export function dateInputFromInstant(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) {
@@ -226,6 +241,27 @@ export function getUpcomingRegisteredMatches({
       (first, second) =>
         new Date(first.startsAt).getTime() - new Date(second.startsAt).getTime(),
     );
+}
+
+export function getPlayedRegisteredMatchesCount({
+  matches,
+  currentUserId,
+  now = new Date(),
+}: {
+  matches: MatchResponse[];
+  currentUserId: string | null;
+  now?: Date;
+}) {
+  if (!currentUserId) {
+    return 0;
+  }
+
+  return matches.filter((match) => {
+    const matchDate = new Date(match.startsAt);
+    const isPast = Number.isFinite(matchDate.getTime()) && matchDate < now;
+
+    return isPast && userParticipatesInMatch(match, currentUserId);
+  }).length;
 }
 
 export function isMatchOpen(match: MatchResponse) {

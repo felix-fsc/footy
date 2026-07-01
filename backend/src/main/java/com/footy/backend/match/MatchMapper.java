@@ -30,6 +30,7 @@ final class MatchMapper {
                 match.getId(),
                 match.getTitle(),
                 match.getStartsAt(),
+                match.getDurationMinutes(),
                 match.getMaxPlayersPerTeam(),
                 match.getPricePerPersonCents(),
                 match.getCoverImageUrl(),

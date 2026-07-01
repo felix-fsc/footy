@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { DEFAULT_MATCH_DRAFT } from "../constants/matchDraftDefaults";
 import type {
   MapLocation,
+  MatchLocationMode,
   MatchResponse,
   SavedFieldResponse,
 } from "../types/domain";
@@ -22,6 +23,9 @@ export function useMatchDraft() {
   const [city, setCity] = useState<string>(DEFAULT_MATCH_DRAFT.city);
   const [date, setDateState] = useState(tomorrowDateParts());
   const [time, setTime] = useState<string>(DEFAULT_MATCH_DRAFT.time);
+  const [durationMinutes, setDurationMinutes] = useState<string>(
+    DEFAULT_MATCH_DRAFT.durationMinutes,
+  );
   const [maxPlayers, setMaxPlayers] = useState<string>(
     DEFAULT_MATCH_DRAFT.maxPlayers,
   );
@@ -35,6 +39,8 @@ export function useMatchDraft() {
   const [selectedSavedFieldId, setSelectedSavedFieldId] = useState<
     string | null
   >(null);
+  const [locationMode, setLocationModeState] =
+    useState<MatchLocationMode>("manual");
   const [showPreview, setShowPreview] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
@@ -47,10 +53,12 @@ export function useMatchDraft() {
     setCity(DEFAULT_MATCH_DRAFT.city);
     setDateState(tomorrowDateParts());
     setTime(DEFAULT_MATCH_DRAFT.time);
+    setDurationMinutes(DEFAULT_MATCH_DRAFT.durationMinutes);
     setMaxPlayers(DEFAULT_MATCH_DRAFT.maxPlayers);
     setPricePerPerson(DEFAULT_MATCH_DRAFT.pricePerPerson);
     setLatitude(DEFAULT_MATCH_DRAFT.latitude);
     setLongitude(DEFAULT_MATCH_DRAFT.longitude);
+    setLocationModeState("manual");
     setSelectedSavedFieldId(null);
     setShowPreview(false);
     setShowCalendar(false);
@@ -75,10 +83,12 @@ export function useMatchDraft() {
     setCity(draftValues.city);
     setDateState(dateInputFromInstant(match.startsAt));
     setTime(timeInputFromInstant(match.startsAt));
+    setDurationMinutes(draftValues.durationMinutes);
     setMaxPlayers(draftValues.maxPlayers);
     setPricePerPerson(draftValues.pricePerPerson);
     setLatitude(match.field?.latitude ?? DEFAULT_MAP_CENTER.latitude);
     setLongitude(match.field?.longitude ?? DEFAULT_MAP_CENTER.longitude);
+    setLocationModeState("manual");
     setSelectedSavedFieldId(null);
     setShowPreview(false);
     setShowCalendar(false);
@@ -87,8 +97,10 @@ export function useMatchDraft() {
   const selectSavedField = useCallback((field: SavedFieldResponse | null) => {
     setSelectedSavedFieldId(field?.id ?? null);
     if (!field) {
+      setLocationModeState("manual");
       return;
     }
+    setLocationModeState("saved");
     setFieldNameState(field.name);
     setAddress(field.address ?? "");
     setCity(field.city ?? "");
@@ -102,6 +114,7 @@ export function useMatchDraft() {
 
   const setFieldName = useCallback((value: string) => {
     setSelectedSavedFieldId(null);
+    setLocationModeState("manual");
     setFieldNameState(value);
   }, []);
 
@@ -113,6 +126,7 @@ export function useMatchDraft() {
   const applyLocation = useCallback(
     (location: MapLocation, nextAddress?: string, nextCity?: string) => {
       setSelectedSavedFieldId(null);
+      setLocationModeState("manual");
       setLatitude(location.latitude);
       setLongitude(location.longitude);
       if (nextAddress) {
@@ -130,9 +144,18 @@ export function useMatchDraft() {
     [],
   );
   const clearSelectedSavedField = useCallback(
-    () => setSelectedSavedFieldId(null),
+    () => {
+      setSelectedSavedFieldId(null);
+      setLocationModeState("manual");
+    },
     [],
   );
+  const setLocationMode = useCallback((mode: MatchLocationMode) => {
+    setLocationModeState(mode);
+    if (mode === "manual") {
+      setSelectedSavedFieldId(null);
+    }
+  }, []);
   const clearEditing = useCallback(() => setEditingMatchId(null), []);
 
   return {
@@ -142,10 +165,12 @@ export function useMatchDraft() {
     city,
     date,
     time,
+    durationMinutes,
     maxPlayers,
     pricePerPerson,
     latitude,
     longitude,
+    locationMode,
     selectedSavedFieldId,
     showPreview,
     showCalendar,
@@ -154,11 +179,13 @@ export function useMatchDraft() {
     setFieldName,
     setDate,
     setTime,
+    setDurationMinutes,
     setMaxPlayers,
     setPricePerPerson,
     setShowPreview,
     setShowCalendar,
     toggleCalendar,
+    setLocationMode,
     closePanels,
     reset,
     startCreate,
