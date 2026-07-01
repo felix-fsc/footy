@@ -1,0 +1,635 @@
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { LocationTargetIcon, PencilIcon } from "../icons/AppIcons";
+import { StatusBadge } from "../ui/FormControls";
+import type { MatchResponse, MessageResponse, TeamSide } from "../../types/domain";
+import {
+  formatDate,
+  formatPriceFromCents,
+  isTeamFull,
+  publicHandle,
+} from "../../utils/matchUtils";
+import { platformShadow } from "../../utils/styleUtils";
+import { MatchImageBackground } from "./MatchMedia";
+import { TeamOccupancy, TeamRoster } from "./TeamRoster";
+
+type MatchHeroProps = {
+  isAdmin: boolean;
+  loading: boolean;
+  match: MatchResponse;
+  onEditMatch: (match: MatchResponse) => void;
+};
+
+export function MatchHero({
+  isAdmin,
+  loading,
+  match,
+  onEditMatch,
+}: MatchHeroProps) {
+  return (
+    <MatchImageBackground
+      match={match}
+      style={styles.detailCover}
+      imageStyle={styles.detailCoverImage}
+    >
+      <View style={styles.detailCoverOverlay} />
+      <View style={styles.detailCoverTop}>
+        <View style={styles.detailCoverTopLeft}>
+          <StatusBadge status={match.status} />
+          {isAdmin ? <Text style={styles.adminInlinePill}>Admin</Text> : null}
+        </View>
+        <View style={styles.detailCoverTopActions}>
+          <Text style={styles.detailCoverPill}>
+            {formatPriceFromCents(match.pricePerPersonCents)}
+          </Text>
+          {isAdmin ? (
+            <Pressable
+              style={({ pressed }) => [
+                styles.adminFloatingEditButton,
+                pressed && styles.adminFloatingButtonPressed,
+              ]}
+              onPress={() => onEditMatch(match)}
+              disabled={loading}
+              accessibilityRole="button"
+              accessibilityLabel="Editar partido"
+            >
+              <PencilIcon />
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+      <View style={styles.detailCoverContent}>
+        <Text style={styles.detailTitle} numberOfLines={2}>
+          {match.title}
+        </Text>
+        <Text style={styles.detailSubtitle} numberOfLines={1}>
+          {match.field?.name ?? "Campo por confirmar"}
+        </Text>
+      </View>
+    </MatchImageBackground>
+  );
+}
+
+export function MatchInfoCards({ match }: { match: MatchResponse }) {
+  return (
+    <View style={styles.detailInfoGrid}>
+      <View style={styles.detailInfoCard}>
+        <Text style={styles.detailInfoLabel}>Fecha</Text>
+        <Text style={styles.detailInfoValue} numberOfLines={2}>
+          {formatDate(match.startsAt)}
+        </Text>
+      </View>
+      <View style={styles.detailInfoCard}>
+        <Text style={styles.detailInfoLabel}>Formato</Text>
+        <Text style={styles.detailInfoValue}>
+          {match.maxPlayersPerTeam} vs {match.maxPlayersPerTeam}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+type MatchLocationCardProps = {
+  match: MatchResponse;
+  onOpenDirections: (match: MatchResponse) => void;
+  onOpenProfile: (userId: string) => void;
+};
+
+export function MatchLocationCard({
+  match,
+  onOpenDirections,
+  onOpenProfile,
+}: MatchLocationCardProps) {
+  return (
+    <>
+      <View style={styles.detailLocationCard}>
+        <View style={styles.detailLocationIcon}>
+          <LocationTargetIcon />
+        </View>
+        <View style={styles.detailLocationTextWrap}>
+          <Text style={styles.detailLocationTitle} numberOfLines={1}>
+            {match.field?.name ?? "Campo por confirmar"}
+          </Text>
+          <Text style={styles.detailLocationMeta} numberOfLines={2}>
+            {match.field?.address ?? "Direccion pendiente"} -{" "}
+            {match.field?.city ?? "Sin ciudad"}
+          </Text>
+          <Pressable onPress={() => onOpenProfile(match.createdBy.id)}>
+            <Text style={styles.detailOrganizer} numberOfLines={1}>
+              Organiza {publicHandle(match.createdBy)}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <Pressable
+        style={styles.directionsButton}
+        onPress={() => onOpenDirections(match)}
+      >
+        <Text style={styles.directionsButtonText}>Como llegar</Text>
+      </Pressable>
+    </>
+  );
+}
+
+type MatchAdminActionsProps = {
+  loading: boolean;
+  match: MatchResponse;
+  onCancelMatch: (matchId: string) => void;
+  onDeleteMatch: (matchId: string) => void;
+};
+
+export function MatchAdminActions({
+  loading,
+  match,
+  onCancelMatch,
+  onDeleteMatch,
+}: MatchAdminActionsProps) {
+  return (
+    <View style={styles.detailAdminInlineActions}>
+      {match.status !== "CANCELLED" ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.adminInlineActionButton,
+            pressed && styles.inlineActionPressed,
+          ]}
+          onPress={() => onCancelMatch(match.id)}
+          disabled={loading}
+        >
+          <Text style={styles.adminInlineActionText}>Cancelar</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        style={({ pressed }) => [
+          styles.adminInlineActionButton,
+          styles.adminInlineDangerButton,
+          pressed && styles.inlineActionPressed,
+        ]}
+        onPress={() => onDeleteMatch(match.id)}
+        disabled={loading}
+      >
+        <Text style={[styles.adminInlineActionText, styles.adminInlineDangerText]}>
+          Borrar
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+type MatchPlayersSectionProps = {
+  isAdmin: boolean;
+  match: MatchResponse;
+  onOpenProfile: (userId: string) => void;
+  onRemovePlayer: (matchId: string, userId: string) => void;
+};
+
+export function MatchPlayersSection({
+  isAdmin,
+  match,
+  onOpenProfile,
+  onRemovePlayer,
+}: MatchPlayersSectionProps) {
+  return (
+    <View style={styles.detailSection}>
+      <View style={styles.detailSectionHeader}>
+        <Text style={styles.detailSectionTitle}>Jugadores</Text>
+        <Text style={styles.detailSectionMeta}>
+          {(match.occupancy?.totalPlayers ?? 0)}/
+          {match.occupancy?.totalCapacity ?? match.maxPlayersPerTeam * 2}
+        </Text>
+      </View>
+      <TeamOccupancy match={match} />
+      <TeamRoster
+        match={match}
+        onOpenProfile={onOpenProfile}
+        canRemovePlayers={isAdmin}
+        onRemovePlayer={(userId) => onRemovePlayer(match.id, userId)}
+      />
+    </View>
+  );
+}
+
+type MatchJoinPanelProps = {
+  isAdmin: boolean;
+  loading: boolean;
+  match: MatchResponse;
+  selectedIsOpen: boolean;
+  selectedIsOwner: boolean;
+  selectedIsParticipant: boolean;
+  onCancelMatch: (matchId: string) => void;
+  onJoinMatch: (matchId: string, teamSide: TeamSide) => void;
+  onLeaveMatch: (matchId: string) => void;
+};
+
+export function MatchJoinPanel({
+  isAdmin,
+  loading,
+  match,
+  selectedIsOpen,
+  selectedIsOwner,
+  selectedIsParticipant,
+  onCancelMatch,
+  onJoinMatch,
+  onLeaveMatch,
+}: MatchJoinPanelProps) {
+  return (
+    <View style={styles.detailActionPanel}>
+      {selectedIsParticipant && match.status !== "CANCELLED" ? (
+        <Pressable
+          style={styles.ghostDangerButton}
+          onPress={() => onLeaveMatch(match.id)}
+          disabled={loading}
+        >
+          <Text style={styles.ghostDangerText}>Salir del partido</Text>
+        </Pressable>
+      ) : match.status !== "OPEN" ? (
+        <View style={styles.statusBanner}>
+          <Text style={styles.statusBannerText}>
+            {match.status === "FULL" ? "Partido completo" : "Partido cancelado"}
+          </Text>
+        </View>
+      ) : (
+        <>
+          <Text style={styles.detailActionTitle}>Elige equipo para apuntarte</Text>
+          <View style={styles.cardActions}>
+            <Pressable
+              style={[
+                styles.darkJoinButton,
+                (loading || !selectedIsOpen || isTeamFull(match, "A")) &&
+                  styles.actionButtonDisabled,
+              ]}
+              onPress={() => onJoinMatch(match.id, "A")}
+              disabled={loading || !selectedIsOpen || isTeamFull(match, "A")}
+            >
+              <Text style={styles.darkJoinText}>
+                {isTeamFull(match, "A") ? "Completo" : "Equipo A"}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.limeJoinButton,
+                (loading || !selectedIsOpen || isTeamFull(match, "B")) &&
+                  styles.actionButtonDisabled,
+              ]}
+              onPress={() => onJoinMatch(match.id, "B")}
+              disabled={loading || !selectedIsOpen || isTeamFull(match, "B")}
+            >
+              <Text style={styles.limeJoinText}>
+                {isTeamFull(match, "B") ? "Completo" : "Equipo B"}
+              </Text>
+            </Pressable>
+          </View>
+        </>
+      )}
+      {selectedIsOwner && !isAdmin && match.status !== "CANCELLED" ? (
+        <Pressable
+          style={styles.cancelMatchButton}
+          onPress={() => onCancelMatch(match.id)}
+          disabled={loading}
+        >
+          <Text style={styles.cancelMatchText}>Cancelar partido</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+type MatchChatLauncherProps = {
+  matchId: string;
+  messages: MessageResponse[];
+  selectedIsParticipant: boolean;
+  onOpenChat: (matchId: string) => void;
+};
+
+export function MatchChatLauncher({
+  matchId,
+  messages,
+  selectedIsParticipant,
+  onOpenChat,
+}: MatchChatLauncherProps) {
+  return (
+    <Pressable style={styles.detailChatLauncher} onPress={() => onOpenChat(matchId)}>
+      <View style={styles.detailChatIcon}>
+        <View style={styles.detailChatBubbleShape}>
+          <View style={styles.detailChatDot} />
+          <View style={styles.detailChatDot} />
+        </View>
+      </View>
+      <View style={styles.detailChatTextWrap}>
+        <Text style={styles.detailChatTitle}>Chat del partido</Text>
+        <Text style={styles.detailChatMeta}>
+          {selectedIsParticipant
+            ? messages.length > 0
+              ? `${messages.length} mensajes`
+              : "Coordina con tu equipo"
+            : "Unete al partido para escribir"}
+        </Text>
+      </View>
+      <Text style={styles.detailChatOpenText}>Abrir</Text>
+    </Pressable>
+  );
+}
+
+export const matchDetailSectionStyles = StyleSheet.create({
+  detailHeroCard: {
+    backgroundColor: "rgba(7,12,9,0.94)",
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.12)",
+    ...platformShadow({ opacity: 0.24, radius: 24, y: 14 }),
+  },
+  detailBody: { padding: 12, gap: 12 },
+});
+
+const styles = StyleSheet.create({
+  detailCover: {
+    minHeight: 238,
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#0A110E",
+  },
+  detailCoverImage: { opacity: 0.76 },
+  detailCoverOverlay: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: "rgba(5,10,7,0.34)",
+  },
+  detailCoverTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  detailCoverTopLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  detailCoverTopActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  detailCoverPill: {
+    overflow: "hidden",
+    borderRadius: 18,
+    backgroundColor: "rgba(143,234,106,0.92)",
+    color: "#0A110E",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  adminInlinePill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "rgba(7,16,10,0.72)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.34)",
+    color: "#8FEA6A",
+    fontSize: 10,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    textTransform: "uppercase",
+  },
+  adminFloatingEditButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(7,16,10,0.78)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+    ...platformShadow({ opacity: 0.22, radius: 12, y: 8 }),
+  },
+  adminFloatingButtonPressed: { opacity: 0.78, transform: [{ scale: 0.96 }] },
+  detailCoverContent: { gap: 7 },
+  detailTitle: {
+    color: "#F7F1E8",
+    fontSize: 30,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  detailSubtitle: {
+    color: "rgba(247,241,232,0.84)",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  detailInfoGrid: { flexDirection: "row", gap: 10 },
+  detailInfoCard: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: 20,
+    backgroundColor: "rgba(247,241,232,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    justifyContent: "center",
+    gap: 5,
+  },
+  detailInfoLabel: {
+    color: "rgba(247,241,232,0.58)",
+    fontSize: 10,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  detailInfoValue: {
+    color: "#F7F1E8",
+    fontSize: 14,
+    fontWeight: "900",
+    lineHeight: 18,
+  },
+  detailLocationCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 22,
+    backgroundColor: "rgba(143,234,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.18)",
+    padding: 12,
+  },
+  detailLocationIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(7,16,10,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailLocationTextWrap: { flex: 1, gap: 3 },
+  detailLocationTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  detailLocationMeta: {
+    color: "rgba(247,241,232,0.70)",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 16,
+  },
+  detailOrganizer: {
+    color: "#8FEA6A",
+    fontSize: 11,
+    fontWeight: "900",
+    marginTop: 2,
+  },
+  directionsButton: {
+    minHeight: 46,
+    borderRadius: 20,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  directionsButtonText: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  detailAdminInlineActions: { flexDirection: "row", gap: 8 },
+  adminInlineActionButton: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 17,
+    backgroundColor: "rgba(247,241,232,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminInlineDangerButton: {
+    backgroundColor: "rgba(217,88,88,0.22)",
+    borderColor: "rgba(217,88,88,0.40)",
+  },
+  inlineActionPressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
+  adminInlineActionText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
+  adminInlineDangerText: { color: "#FFD1D1" },
+  detailSection: {
+    borderRadius: 24,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    gap: 10,
+  },
+  detailSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  detailSectionTitle: { color: "#F7F1E8", fontSize: 18, fontWeight: "900" },
+  detailSectionMeta: {
+    overflow: "hidden",
+    borderRadius: 14,
+    backgroundColor: "rgba(143,234,106,0.18)",
+    color: "#8FEA6A",
+    fontSize: 12,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  detailActionPanel: {
+    borderRadius: 24,
+    backgroundColor: "rgba(247,241,232,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(247,241,232,0.10)",
+    padding: 12,
+    gap: 10,
+  },
+  detailActionTitle: {
+    color: "rgba(247,241,232,0.78)",
+    fontSize: 13,
+    fontWeight: "900",
+  },
+  cardActions: { flexDirection: "row", gap: 10, marginTop: 2 },
+  actionButtonDisabled: { opacity: 0.46 },
+  darkJoinButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    backgroundColor: "rgba(10,17,14,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  darkJoinText: { color: "#F7F1E8", fontWeight: "900" },
+  limeJoinButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 18,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  limeJoinText: { color: "#0A110E", fontWeight: "900" },
+  ghostDangerButton: {
+    minHeight: 48,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(227,219,208,0.26)",
+    backgroundColor: "rgba(10,17,14,0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  ghostDangerText: { color: "#F7F1E8", fontWeight: "900" },
+  cancelMatchButton: {
+    minHeight: 46,
+    borderRadius: 23,
+    backgroundColor: "#D95858",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelMatchText: { color: "#FFFFFF", fontWeight: "900" },
+  statusBanner: {
+    minHeight: 44,
+    borderRadius: 19,
+    backgroundColor: "rgba(217,88,88,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#D95858",
+  },
+  statusBannerText: { color: "#8F2727", fontWeight: "900" },
+  detailChatLauncher: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    minHeight: 68,
+    borderRadius: 24,
+    backgroundColor: "rgba(143,234,106,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(143,234,106,0.22)",
+    paddingHorizontal: 12,
+  },
+  detailChatIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#8FEA6A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  detailChatBubbleShape: {
+    width: 24,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#0A110E",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  detailChatDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#8FEA6A",
+  },
+  detailChatTextWrap: { flex: 1, gap: 3 },
+  detailChatTitle: { color: "#F7F1E8", fontSize: 15, fontWeight: "900" },
+  detailChatMeta: {
+    color: "rgba(247,241,232,0.64)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  detailChatOpenText: { color: "#8FEA6A", fontSize: 12, fontWeight: "900" },
+});
