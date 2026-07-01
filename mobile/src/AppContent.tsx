@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApiRequest } from "./api/useApiRequest";
+import { AppTabRenderer } from "./components/app/AppTabRenderer";
 import { IntroVideoOverlay } from "./components/intro/IntroVideoOverlay";
 import { useAdminFields } from "./hooks/useAdminFields";
 import { useAndroidBackHandler } from "./hooks/useAndroidBackHandler";
@@ -16,16 +17,9 @@ import { useMatches } from "./hooks/useMatches";
 import { useProfile } from "./hooks/useProfile";
 import { useProfileActions } from "./hooks/useProfileActions";
 import { useAppViewActions } from "./hooks/useAppViewActions";
-import { openMatchDirections } from "./platform/directions";
 import { AuthScreen } from "./screens/AuthScreen";
-import { CreateMatchScreen } from "./screens/CreateMatchScreen";
-import { HomeScreen } from "./screens/HomeScreen";
 import { LoadingScreen } from "./screens/LoadingScreen";
-import { LocationScreen } from "./screens/LocationScreen";
-import { MatchDetailScreen } from "./screens/MatchDetailScreen";
-import { ProfileScreen } from "./screens/ProfileScreen";
 import { getMatchDraftCity, getUserCity } from "./utils/appStateUtils";
-import { getMatchViewerState } from "./utils/matchUtils";
 
 export function AppContent() {
   const safeInsets = useSafeAreaInsets();
@@ -62,10 +56,6 @@ export function AppContent() {
 
   const matchesState = useMatches({ request, token });
   const navigation = useAppNavigation({ matchDraft, matchesState });
-  const selectedMatchViewerState = getMatchViewerState(
-    matchesState.selectedMatch,
-    currentUserId,
-  );
 
   const adminFields = useAdminFields({
     request,
@@ -183,216 +173,27 @@ export function AppContent() {
     );
   }
 
-  if (navigation.appTab === "profile") {
-    return (
-      <ProfileScreen
-        admin={{
-          address: adminFields.address,
-          city: adminFields.city,
-          editingId: adminFields.editingId,
-          isAdmin,
-          latitude: adminFields.latitude,
-          longitude: adminFields.longitude,
-          name: adminFields.name,
-          savedFields: adminFields.savedFields,
-        }}
-        adminActions={{
-          onAddressChange: adminFields.setAddress,
-          onCityChange: adminFields.setCity,
-          onDeleteField: adminFields.remove,
-          onLatitudeChange: adminFields.setLatitude,
-          onLongitudeChange: adminFields.setLongitude,
-          onNameChange: adminFields.setName,
-          onSaveField: adminFields.save,
-          onStartFieldCreate: adminFields.startCreate,
-          onStartFieldEdit: adminFields.startEdit,
-        }}
-        layout={{
-          bottomInset: safeInsets.bottom,
-          topInset: safeInsets.top,
-        }}
-        navigation={{
-          onCreate: navigation.startMatchCreate,
-          onHome: navigation.goHome,
-          onOpenMatch: navigation.openDetail,
-          onProfile: navigation.openProfile,
-        }}
-        profileActions={{
-          onBioChange: profileState.setBio,
-          onCityChange: profileState.setCity,
-          onFullNameChange: profileState.setFullName,
-          onLogout: authActions.logout,
-          onPositionChange: profileState.setPosition,
-          onSaveProfile: profileActions.saveProfile,
-          onToggleEditing: profileState.toggleEditing,
-          onUsernameChange: profileState.setUsername,
-        }}
-        profileData={{
-          bio: profileState.bio,
-          city: profileState.city,
-          editing: profileState.editing,
-          fullName: profileState.fullName,
-          loading,
-          myMatches: matchesState.myMatches,
-          nextMyMatch: matchesState.nextMyMatch,
-          position: profileState.position,
-          profile: profileState.profile,
-          userName,
-          username: profileState.username,
-          victoryStreak: matchesState.victoryStreak,
-        }}
-      />
-    );
-  }
-  if (navigation.appTab === "location") {
-    return (
-      <LocationScreen
-        latitude={matchDraft.latitude}
-        longitude={matchDraft.longitude}
-        city={matchDraftCity}
-        fieldName={matchDraft.fieldName}
-        topInset={safeInsets.top}
-        bottomInset={safeInsets.bottom}
-        onBack={navigation.backToCreate}
-        onUseLocation={navigation.backToCreate}
-        onLocationChange={viewActions.applyLocationToDraft}
-      />
-    );
-  }
-  if (navigation.appTab === "create") {
-    return (
-      <CreateMatchScreen
-        actions={{
-          onClose: matchDraft.editingMatchId
-            ? navigation.closeMatchEditor
-            : navigation.goHome,
-          onClosePreview: viewActions.closePreview,
-          onDateChange: matchDraft.setDate,
-          onFieldNameChange: matchDraft.setFieldName,
-          onMaxPlayersChange: matchDraft.setMaxPlayers,
-          onOpenLocationPicker: navigation.openLocationPicker,
-          onOpenPreview: matchEditorActions.openCreatePreview,
-          onPricePerPersonChange: matchDraft.setPricePerPerson,
-          onSelectSavedField: matchDraft.selectSavedField,
-          onSubmit: matchEditorActions.createMatch,
-          onTimeChange: matchDraft.setTime,
-          onTitleChange: matchDraft.setTitle,
-          onToggleCalendar: matchDraft.toggleCalendar,
-        }}
-        draft={{
-          city: matchDraft.city,
-          date: matchDraft.date,
-          fieldName: matchDraft.fieldName,
-          latitude: matchDraft.latitude,
-          longitude: matchDraft.longitude,
-          maxPlayers: matchDraft.maxPlayers,
-          pricePerPerson: matchDraft.pricePerPerson,
-          selectedSavedFieldId: matchDraft.selectedSavedFieldId,
-          time: matchDraft.time,
-          title: matchDraft.title,
-        }}
-        editor={{
-          editingMatchId: matchDraft.editingMatchId,
-          loading,
-          savedFields: adminFields.savedFields,
-          selectedMatch: matchesState.selectedMatch,
-          showCalendar: matchDraft.showCalendar,
-          showPreview: matchDraft.showPreview,
-        }}
-        layout={{
-          bottomInset: safeInsets.bottom,
-          topInset: safeInsets.top,
-        }}
-        navigation={{
-          onCreateTab: navigation.startMatchCreate,
-          onHome: navigation.goHome,
-          onProfile: navigation.openProfile,
-        }}
-      />
-    );
-  }
-
-  if (navigation.appTab === "detail") {
-    return (
-      <MatchDetailScreen
-        actions={{
-          onCancelMatch: matchActions.cancelMatch,
-          onDeleteMatch: matchActions.deleteMatch,
-          onEditMatch: navigation.startMatchEdit,
-          onJoinMatch: matchActions.joinMatch,
-          onLeaveMatch: matchActions.leaveMatch,
-          onOpenDirections: openMatchDirections,
-          onOpenProfile: profileActions.openPublicProfile,
-          onRemovePlayer: matchActions.removeMatchPlayer,
-        }}
-        chat={{
-          messageText: matchActions.messageText,
-          messages: matchActions.messages,
-          onCloseChat: matchActions.closeChat,
-          onMessageTextChange: matchActions.setMessageText,
-          onOpenChat: matchActions.openChat,
-          onQuickMessage: matchActions.sendMatchMessage,
-          onRefreshMessages: matchActions.loadMessages,
-          onSendMessage: matchActions.sendMessage,
-          showMatchChat: matchActions.showMatchChat,
-        }}
-        layout={{
-          bottomInset: safeInsets.bottom,
-          topInset: safeInsets.top,
-        }}
-        navigation={{
-          onCreate: navigation.startMatchCreate,
-          onHome: navigation.goHome,
-          onProfile: navigation.openProfile,
-        }}
-        publicProfileState={{
-          onClosePublicProfile: viewActions.closePublicProfile,
-          publicProfile: profileState.publicProfile,
-          showPublicProfile: profileState.showPublicProfile,
-        }}
-        state={{
-          isAdmin,
-          loading,
-          match: matchesState.selectedMatch,
-          selectedIsOpen: selectedMatchViewerState.isOpen,
-          selectedIsOwner: selectedMatchViewerState.isOwner,
-          selectedIsParticipant: selectedMatchViewerState.isParticipant,
-        }}
-      />
-    );
-  }
-
   return (
-    <HomeScreen
-      actions={{
-        onHomeModeChange: navigation.setHomeMode,
-        onOpenDetail: navigation.openDetail,
-        onRefresh: homeActions.refreshMatches,
-        onSearchQueryChange: matchesState.setSearchQuery,
-        onSelectMatch: matchesState.setSelectedMatchId,
-      }}
-      data={{
-        currentUserId,
-        loading,
-        matches: matchesState.visibleMatches,
-        myMatches: matchesState.myMatches,
-        searchQuery: matchesState.searchQuery,
-        selectedMatch: matchesState.selectedMatch,
-        selectedMatchId: matchesState.selectedMatchId,
-        userCity,
-        victoryStreak: matchesState.victoryStreak,
-      }}
-      layout={{
-        topInset: safeInsets.top,
-      }}
-      navigation={{
-        onCreate: navigation.startMatchCreate,
-        onHome: navigation.goHome,
-        onProfile: navigation.openProfile,
-      }}
-      view={{
-        homeMode: navigation.homeMode,
-      }}
+    <AppTabRenderer
+      adminFields={adminFields}
+      bottomInset={safeInsets.bottom}
+      currentUserId={currentUserId}
+      homeActions={homeActions}
+      isAdmin={isAdmin}
+      loading={loading}
+      matchActions={matchActions}
+      matchDraft={matchDraft}
+      matchDraftCity={matchDraftCity}
+      matchEditorActions={matchEditorActions}
+      matchesState={matchesState}
+      navigation={navigation}
+      onLogout={authActions.logout}
+      profileActions={profileActions}
+      profileState={profileState}
+      topInset={safeInsets.top}
+      userCity={userCity}
+      userName={userName}
+      viewActions={viewActions}
     />
   );
 }
