@@ -57,7 +57,7 @@ export function SelectedPopup({
           <ScrollView
             style={styles.popupMatchList}
             contentContainerStyle={styles.popupMatchListContent}
-            showsVerticalScrollIndicator={groupedMatches.length > 3}
+            showsVerticalScrollIndicator={false}
           >
             {groupedMatches.map((item) => (
               <Pressable
@@ -91,7 +91,10 @@ export function SelectedPopup({
   );
 
   return (
-    <View style={styles.popupCard} {...popupEventProps}>
+    <View
+      style={[styles.popupCard, hasMultipleMatches && styles.popupCardMultiple]}
+      {...popupEventProps}
+    >
       {hasMultipleMatches ? (
         <View style={styles.popupPlainWrap}>{popupContent}</View>
       ) : (
@@ -183,6 +186,10 @@ const styles = StyleSheet.create({
     ...platformShadow({ opacity: 0.32, radius: 24, y: 14 }),
     zIndex: 22,
   },
+  popupCardMultiple: {
+    top: Platform.OS === "web" ? 42 : 34,
+    maxHeight: undefined,
+  },
   popupImageWrap: {
     minHeight: 0,
     padding: 12,
@@ -190,6 +197,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   popupPlainWrap: {
+    flex: 1,
     minHeight: 0,
     padding: 12,
     justifyContent: "flex-start",
@@ -205,7 +213,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: "rgba(10,17,14,0.48)",
   },
-  popupBody: { gap: 8, minHeight: 0 },
+  popupBody: { flex: 1, gap: 8, minHeight: 0 },
   popupHeaderRow: {
     minHeight: 40,
     flexDirection: "row",
@@ -229,16 +237,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   popupMatchList: {
-    maxHeight: Platform.OS === "web" ? 390 : 320,
+    flex: 1,
     marginTop: 0,
   },
-  popupMatchListContent: { paddingBottom: 2 },
+  popupMatchListContent: { gap: 8, paddingBottom: 2 },
   popupSingleOption: {
     gap: 5,
   },
   popupMatchOption: {
-    minHeight: 112,
-    marginBottom: 8,
+    minHeight: 96,
     borderRadius: 18,
     backgroundColor: "rgba(10,17,14,0.48)",
     borderWidth: 1,
@@ -246,11 +253,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   popupMatchOptionImage: {
-    minHeight: 112,
+    minHeight: 96,
     gap: 6,
     paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 10,
+    paddingTop: 7,
+    paddingBottom: 9,
     justifyContent: "flex-start",
   },
   popupMatchOptionImageStyle: {

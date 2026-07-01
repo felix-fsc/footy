@@ -33,9 +33,14 @@ import {
   clampMapZoom,
   getCenterAfterDrag,
   getCityMapCenter,
+  getFieldMatchGroups,
   getMapCanvasFrame,
   getMapCenter,
   getMatchLocation,
+  getNearestMarkerIndex,
+  getLocationFromScreenPoint,
+  getPinchZoom,
+  getSelectedFieldGroup,
   getTouchDistance,
   getVisibleTiles,
   getWheelZoomDelta,
@@ -433,6 +438,54 @@ test("calcula ubicaciones y limites basicos del mapa", () => {
   );
 });
 
+test("agrupa partidos por campo y localiza seleccion de marcador", () => {
+  const early = match({
+    id: "early",
+    startsAt: "2026-06-30T18:00:00.000Z",
+  });
+  const late = match({
+    id: "late",
+    startsAt: "2026-06-30T20:00:00.000Z",
+  });
+  const other = match({
+    id: "other",
+    field: {
+      ...early.field,
+      id: "field-2",
+      name: "Otro campo",
+      latitude: 37.3,
+      longitude: -6.9,
+    },
+  });
+
+  const groups = getFieldMatchGroups([late, other, early]);
+
+  assert.equal(groups.length, 2);
+  assert.deepEqual(
+    groups.find((group) => group.key === "field-1")?.matches.map((item) => item.id),
+    ["early", "late"],
+  );
+  assert.equal(getSelectedFieldGroup(groups, "late")?.key, "field-1");
+  assert.equal(getSelectedFieldGroup(groups, "missing"), null);
+  assert.equal(
+    getNearestMarkerIndex({
+      markerCoordinates: [
+        { x: 10, y: 10 },
+        { x: 100, y: 100 },
+      ],
+      point: { x: 104, y: 104 },
+    }),
+    1,
+  );
+  assert.equal(
+    getNearestMarkerIndex({
+      markerCoordinates: [{ x: 10, y: 10 }],
+      point: { x: 100, y: 100 },
+    }),
+    -1,
+  );
+});
+
 test("convierte entre lat/lon y coordenadas de mundo de forma reversible", () => {
   const location = { latitude: 37.26142, longitude: -6.94472 };
   const world = latLonToWorld(location, 14);
@@ -483,6 +536,39 @@ test("calcula frame, rueda y drag del mapa", () => {
   });
   assert.notEqual(dragged.latitude, center.latitude);
   assert.notEqual(dragged.longitude, center.longitude);
+});
+
+test("calcula zoom por pellizco y ubicacion desde toque de pantalla", () => {
+  assert.equal(
+    getPinchZoom({
+      currentDistance: 200,
+      startDistance: 100,
+      startZoom: 14,
+    }),
+    16,
+  );
+  assert.equal(
+    getPinchZoom({
+      currentDistance: 0,
+      startDistance: 100,
+      startZoom: 14,
+    }),
+    14,
+  );
+
+  const center = { latitude: 37.26142, longitude: -6.94472 };
+  const mapData = getVisibleTiles(center, 14, 512, 512);
+  const picked = getLocationFromScreenPoint({
+    canvas: { left: 0, top: 0 },
+    dragOffset: { x: 0, y: 0 },
+    locationX: 256,
+    locationY: 256,
+    topLeft: mapData.topLeft,
+    zoom: 14,
+  });
+
+  assert.ok(Math.abs(picked.latitude - center.latitude) < 0.000001);
+  assert.ok(Math.abs(picked.longitude - center.longitude) < 0.000001);
 });
 
 test("genera tiles visibles y proyecta ubicaciones en pantalla", () => {

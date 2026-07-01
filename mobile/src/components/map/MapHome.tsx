@@ -11,16 +11,20 @@ import {
   Text,
   View,
 } from "react-native";
-import type { FieldMatchGroup, MapLocation, MatchResponse } from "../../types/domain";
+import type { MapLocation, MatchResponse } from "../../types/domain";
 import {
   MAP_DEFAULT_ZOOM,
   MAP_TILE_SIZE,
   clampMapZoom,
   getCityMapCenter,
   getCenterAfterDrag,
+  getFieldMatchGroups,
   getMapCanvasFrame,
   getMapCenter,
   getMatchLocation,
+  getNearestMarkerIndex,
+  getPinchZoom,
+  getSelectedFieldGroup,
   getTouchDistance,
   getVisibleTiles,
   projectLocation,
@@ -114,43 +118,7 @@ export function MapHome({
     [canvas.height, canvas.width, mapCenter, zoom],
   );
 
-  const fieldGroups = useMemo(() => {
-    const groups = new Map<string, FieldMatchGroup>();
-
-    matches.forEach((match) => {
-      const location = getMatchLocation(match);
-      if (!location) {
-        return;
-      }
-
-      const field = match.field;
-      const key =
-        field?.id ??
-        `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
-      const current = groups.get(key);
-
-      if (current) {
-        current.matches.push(match);
-        return;
-      }
-
-      groups.set(key, {
-        key,
-        fieldName: field?.name ?? "Pista sin nombre",
-        latitude: location.latitude,
-        longitude: location.longitude,
-        matches: [match],
-      });
-    });
-
-    return Array.from(groups.values()).map((group) => ({
-      ...group,
-      matches: group.matches.sort(
-        (a, b) =>
-          new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
-      ),
-    }));
-  }, [matches]);
+  const fieldGroups = useMemo(() => getFieldMatchGroups(matches), [matches]);
 
   const markerCoordinates = useMemo(
     () =>
@@ -167,17 +135,10 @@ export function MapHome({
     [fieldGroups, mapData.topLeft, zoom],
   );
 
-  const selectedFieldGroup = useMemo(() => {
-    if (!selectedMatchId) {
-      return null;
-    }
-
-    return (
-      fieldGroups.find((group) =>
-        group.matches.some((match) => match.id === selectedMatchId),
-      ) ?? null
-    );
-  }, [fieldGroups, selectedMatchId]);
+  const selectedFieldGroup = useMemo(
+    () => getSelectedFieldGroup(fieldGroups, selectedMatchId),
+    [fieldGroups, selectedMatchId],
+  );
 
   function commitDrag(nextOffset: { x: number; y: number }) {
     if (nextOffset.x === 0 && nextOffset.y === 0) {
@@ -198,10 +159,12 @@ export function MapHome({
       x: locationX - canvas.left - latestDragOffset.current.x,
       y: locationY - canvas.top - latestDragOffset.current.y,
     };
-    const hitIndex = markerCoordinates.findIndex((coordinate) => {
-      const dx = coordinate.left - point.x;
-      const dy = coordinate.top - point.y;
-      return Math.sqrt(dx * dx + dy * dy) <= 42;
+    const hitIndex = getNearestMarkerIndex({
+      markerCoordinates: markerCoordinates.map((coordinate) => ({
+        x: coordinate.left,
+        y: coordinate.top,
+      })),
+      point,
     });
 
     if (hitIndex >= 0) {
@@ -246,10 +209,13 @@ export function MapHome({
             if (distance > 0 && pinchStartDistance.current > 0) {
               movedDuringGesture.current = true;
               pinchActive.current = true;
-              const zoomDelta = Math.round(
-                Math.log2(distance / pinchStartDistance.current) * 2,
+              setZoom(
+                getPinchZoom({
+                  currentDistance: distance,
+                  startDistance: pinchStartDistance.current,
+                  startZoom: pinchStartZoom.current,
+                }),
               );
-              setZoom(clampMapZoom(pinchStartZoom.current + zoomDelta));
               setDragOffset({ x: 0, y: 0 });
             }
             return;

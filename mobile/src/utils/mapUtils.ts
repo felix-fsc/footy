@@ -1,4 +1,5 @@
 import type {
+  FieldMatchGroup,
   GeocodeResult,
   MapLocation,
   MapPoint,
@@ -88,6 +89,73 @@ export function getMapCenter(
   };
 }
 
+export function getFieldMatchGroups(matches: MatchResponse[]) {
+  const groups = new Map<string, FieldMatchGroup>();
+
+  matches.forEach((match) => {
+    const location = getMatchLocation(match);
+    if (!location) {
+      return;
+    }
+
+    const field = match.field;
+    const key =
+      field?.id ?? `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)}`;
+    const current = groups.get(key);
+
+    if (current) {
+      current.matches.push(match);
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      fieldName: field?.name ?? "Pista sin nombre",
+      latitude: location.latitude,
+      longitude: location.longitude,
+      matches: [match],
+    });
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    ...group,
+    matches: group.matches.sort(
+      (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+    ),
+  }));
+}
+
+export function getSelectedFieldGroup(
+  fieldGroups: FieldMatchGroup[],
+  selectedMatchId: string | null,
+) {
+  if (!selectedMatchId) {
+    return null;
+  }
+
+  return (
+    fieldGroups.find((group) =>
+      group.matches.some((match) => match.id === selectedMatchId),
+    ) ?? null
+  );
+}
+
+export function getNearestMarkerIndex({
+  hitRadius = 42,
+  markerCoordinates,
+  point,
+}: {
+  hitRadius?: number;
+  markerCoordinates: MapPoint[];
+  point: MapPoint;
+}) {
+  return markerCoordinates.findIndex((coordinate) => {
+    const dx = coordinate.x - point.x;
+    const dy = coordinate.y - point.y;
+    return Math.sqrt(dx * dx + dy * dy) <= hitRadius;
+  });
+}
+
 export function getMapCanvasFrame(viewport: { width: number; height: number }) {
   const width = Math.max(viewport.width + 768, 1200);
   const height = Math.max(viewport.height + 768, 1200);
@@ -135,6 +203,47 @@ export function getCenterAfterDrag({
     {
       x: centerWorld.x - dragOffset.x,
       y: centerWorld.y - dragOffset.y,
+    },
+    zoom,
+  );
+}
+
+export function getPinchZoom({
+  currentDistance,
+  startDistance,
+  startZoom,
+}: {
+  currentDistance: number;
+  startDistance: number;
+  startZoom: number;
+}) {
+  if (currentDistance <= 0 || startDistance <= 0) {
+    return startZoom;
+  }
+
+  const zoomDelta = Math.round(Math.log2(currentDistance / startDistance) * 2);
+  return clampMapZoom(startZoom + zoomDelta);
+}
+
+export function getLocationFromScreenPoint({
+  canvas,
+  dragOffset,
+  locationX,
+  locationY,
+  topLeft,
+  zoom,
+}: {
+  canvas: { left: number; top: number };
+  dragOffset: MapPoint;
+  locationX: number;
+  locationY: number;
+  topLeft: MapPoint;
+  zoom: number;
+}) {
+  return worldToLatLon(
+    {
+      x: topLeft.x + locationX - canvas.left - dragOffset.x,
+      y: topLeft.y + locationY - canvas.top - dragOffset.y,
     },
     zoom,
   );

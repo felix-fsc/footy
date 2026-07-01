@@ -26,6 +26,13 @@ export function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
     if (finished.current || !mounted.current) {
       return;
     }
+    if (
+      Platform.OS === "web" &&
+      typeof document !== "undefined" &&
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
 
     try {
       void Promise.resolve(player.play()).catch(() => undefined);
@@ -49,6 +56,48 @@ export function IntroVideoOverlay({ onDone }: { onDone: () => void }) {
     return () => {
       clearTimeout(playTimer);
       mounted.current = false;
+    };
+  }, [playSafely]);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof window === "undefined") {
+      return;
+    }
+
+    function ignoreExpectedMediaAbort(event: PromiseRejectionEvent) {
+      const reason = event.reason as { name?: string; message?: string };
+      const message = reason?.message ?? "";
+      if (
+        reason?.name === "AbortError" &&
+        message.toLowerCase().includes("play() request")
+      ) {
+        event.preventDefault();
+      }
+    }
+
+    window.addEventListener("unhandledrejection", ignoreExpectedMediaAbort);
+    return () => {
+      window.removeEventListener(
+        "unhandledrejection",
+        ignoreExpectedMediaAbort,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") {
+      return;
+    }
+
+    function playWhenVisible() {
+      if (document.visibilityState === "visible") {
+        playSafely();
+      }
+    }
+
+    document.addEventListener("visibilitychange", playWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", playWhenVisible);
     };
   }, [playSafely]);
 

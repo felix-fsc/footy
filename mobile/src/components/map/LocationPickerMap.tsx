@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Image,
   PanResponder,
   Platform,
@@ -13,18 +12,18 @@ import {
 } from "react-native";
 import { LocationTargetIcon } from "../icons/AppIcons";
 import type { MapLocation } from "../../types/domain";
+import { useLocationSearch } from "../../hooks/useLocationSearch";
 import {
   MAP_TILE_SIZE,
   clampMapZoom,
-  geocodePlace,
   getCenterAfterDrag,
-  getCityMapCenter,
+  getLocationFromScreenPoint,
   getMapCanvasFrame,
+  getPinchZoom,
   getTouchDistance,
   getVisibleTiles,
   projectLocation,
   getWheelZoomDelta,
-  worldToLatLon,
 } from "../../utils/mapUtils";
 
 const LOCATION_PICKER_EDGE_PADDING = 10;
@@ -46,8 +45,6 @@ export function LocationPickerMap({
   const [center, setCenter] = useState<MapLocation>(value);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(15);
-  const [locationSearch, setLocationSearch] = useState("");
-  const [locationSearching, setLocationSearching] = useState(false);
   const panStart = useRef(dragOffset);
   const movedDuringGesture = useRef(false);
   const latestDragOffset = useRef(dragOffset);
@@ -56,6 +53,20 @@ export function LocationPickerMap({
   const pinchActive = useRef(false);
   const skipNextCenterSync = useRef(false);
   const lastWheelZoomAt = useRef(0);
+  const resetMapPosition = useCallback((location: MapLocation) => {
+    setCenter(location);
+    setDragOffset({ x: 0, y: 0 });
+  }, []);
+  const {
+    locationSearch,
+    locationSearching,
+    searchLocation,
+    setLocationSearch,
+  } = useLocationSearch({
+    city,
+    onChange,
+    onLocationFound: resetMapPosition,
+  });
 
   useEffect(() => {
     latestDragOffset.current = dragOffset;
@@ -91,12 +102,14 @@ export function LocationPickerMap({
   }
 
   function pickPoint(locationX: number, locationY: number) {
-    const worldPoint = {
-      x:
-        mapData.topLeft.x + locationX - canvas.left - latestDragOffset.current.x,
-      y: mapData.topLeft.y + locationY - canvas.top - latestDragOffset.current.y,
-    };
-    const nextLocation = worldToLatLon(worldPoint, zoom);
+    const nextLocation = getLocationFromScreenPoint({
+      canvas,
+      dragOffset: latestDragOffset.current,
+      locationX,
+      locationY,
+      topLeft: mapData.topLeft,
+      zoom,
+    });
     skipNextCenterSync.current = true;
     onChange(nextLocation);
     setDragOffset({ x: 0, y: 0 });
@@ -105,36 +118,6 @@ export function LocationPickerMap({
   function applyZoomDelta(delta: number) {
     setZoom((current) => clampMapZoom(current + delta));
     setDragOffset({ x: 0, y: 0 });
-  }
-
-  async function searchLocation() {
-    const query = locationSearch.trim();
-    if (!query) {
-      const fallback = getCityMapCenter(city);
-      setCenter(fallback);
-      onChange(fallback, city || undefined);
-      setDragOffset({ x: 0, y: 0 });
-      return;
-    }
-
-    setLocationSearching(true);
-    try {
-      const result = await geocodePlace(query, city);
-      if (!result) {
-        Alert.alert("Sin resultados", "No he encontrado esa direccion.");
-        return;
-      }
-      setCenter(result.location);
-      onChange(result.location, result.address);
-      setDragOffset({ x: 0, y: 0 });
-    } catch (error) {
-      Alert.alert(
-        "No se pudo buscar",
-        error instanceof Error ? error.message : "Error inesperado",
-      );
-    } finally {
-      setLocationSearching(false);
-    }
   }
 
   const panResponder = useMemo(
@@ -165,10 +148,13 @@ export function LocationPickerMap({
             if (distance > 0 && pinchStartDistance.current > 0) {
               movedDuringGesture.current = true;
               pinchActive.current = true;
-              const zoomDelta = Math.round(
-                Math.log2(distance / pinchStartDistance.current) * 2,
+              setZoom(
+                getPinchZoom({
+                  currentDistance: distance,
+                  startDistance: pinchStartDistance.current,
+                  startZoom: pinchStartZoom.current,
+                }),
               );
-              setZoom(clampMapZoom(pinchStartZoom.current + zoomDelta));
             }
             setDragOffset({
               x: panStart.current.x + gesture.dx,
