@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Alert } from "react-native";
 import type { ApiRequest } from "../types/api";
 import type { AppTab, MatchResponse } from "../types/domain";
+import type { ShowFeedback } from "../types/feedback";
 import { matchMutationErrorMessage } from "../utils/authUtils";
 import {
   buildMatchRequestBody,
@@ -21,6 +21,7 @@ type UseMatchEditorActionsOptions = {
   setLoading: Dispatch<SetStateAction<boolean>>;
   setSelectedMatchId: Dispatch<SetStateAction<string | null>>;
   setAppTab: Dispatch<SetStateAction<AppTab>>;
+  showFeedback?: ShowFeedback;
 };
 
 export function useMatchEditorActions({
@@ -31,6 +32,7 @@ export function useMatchEditorActions({
   setLoading,
   setSelectedMatchId,
   setAppTab,
+  showFeedback,
 }: UseMatchEditorActionsOptions) {
   const {
     title,
@@ -60,7 +62,11 @@ export function useMatchEditorActions({
     });
 
     if (!validation.ok) {
-      Alert.alert(validation.title, validation.message);
+      showFeedback?.({
+        kind: "warning",
+        title: validation.title,
+        message: validation.message,
+      });
       return null;
     }
 
@@ -70,6 +76,7 @@ export function useMatchEditorActions({
     fieldName,
     maxPlayers,
     pricePerPerson,
+    showFeedback,
     time,
     title,
   ]);
@@ -122,11 +129,19 @@ export function useMatchEditorActions({
       clearEditing();
       setShowPreview(false);
       setAppTab("detail");
+      showFeedback?.({
+        kind: "success",
+        title: editingMatchId ? "Cambios guardados" : "Partido creado",
+        message: editingMatchId
+          ? "La informacion del partido se ha actualizado."
+          : "El partido ya esta publicado.",
+      });
     } catch (error) {
-      Alert.alert(
-        editingMatchId ? "No se pudo editar" : "No se pudo crear",
-        matchMutationErrorMessage(error),
-      );
+      showFeedback?.({
+        kind: "error",
+        title: editingMatchId ? "No se pudo editar" : "No se pudo crear",
+        message: matchMutationErrorMessage(error),
+      });
     } finally {
       setLoading(false);
     }
@@ -149,6 +164,7 @@ export function useMatchEditorActions({
     setLoading,
     setSelectedMatchId,
     setShowPreview,
+    showFeedback,
     time,
     title,
     validateMatchDraft,

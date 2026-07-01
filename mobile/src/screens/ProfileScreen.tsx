@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   Platform,
@@ -18,6 +19,7 @@ import {
   ProfileHero,
   ProfileStatsRow,
 } from "../components/profile/ProfileSections";
+import { ConfirmActionModal } from "../components/ui/ConfirmActionModal";
 import type {
   MatchResponse,
   PlayerPosition,
@@ -105,6 +107,9 @@ export function ProfileScreen({
     username: profileUsername,
     victoryStreak,
   } = profileData;
+  const [fieldToDelete, setFieldToDelete] = useState<SavedFieldResponse | null>(
+    null,
+  );
 
   return (
     <SafeAreaView style={styles.darkScreen}>
@@ -146,7 +151,7 @@ export function ProfileScreen({
             loading={loading}
             onAddressChange={adminActions.onAddressChange}
             onCityChange={adminActions.onCityChange}
-            onDeleteField={adminActions.onDeleteField}
+            onDeleteField={setFieldToDelete}
             onLatitudeChange={adminActions.onLatitudeChange}
             onLongitudeChange={adminActions.onLongitudeChange}
             onNameChange={adminActions.onNameChange}
@@ -182,6 +187,26 @@ export function ProfileScreen({
         onHome={navigation.onHome}
         onCreate={navigation.onCreate}
         onProfile={navigation.onProfile}
+      />
+      <ConfirmActionModal
+        visible={Boolean(fieldToDelete)}
+        loading={loading}
+        title="Borrar pista"
+        message={
+          fieldToDelete
+            ? `Vas a borrar ${fieldToDelete.name}. Los partidos ya publicados no se eliminaran, pero esta pista dejara de aparecer como guardada.`
+            : ""
+        }
+        confirmLabel="Borrar pista"
+        onCancel={() => setFieldToDelete(null)}
+        onConfirm={() => {
+          const field = fieldToDelete;
+          if (!field) {
+            return;
+          }
+          setFieldToDelete(null);
+          adminActions.onDeleteField(field);
+        }}
       />
     </SafeAreaView>
   );

@@ -6,7 +6,7 @@ type TeamRosterProps = {
   match: MatchResponse;
   onOpenProfile?: (userId: string) => void;
   canRemovePlayers?: boolean;
-  onRemovePlayer?: (userId: string) => void;
+  onRemovePlayer?: (userId: string, playerName?: string) => void;
 };
 
 type RosterColumnProps = {
@@ -14,7 +14,7 @@ type RosterColumnProps = {
   players: MatchPlayerResponse[];
   onOpenProfile?: (userId: string) => void;
   canRemovePlayers?: boolean;
-  onRemovePlayer?: (userId: string) => void;
+  onRemovePlayer?: (userId: string, playerName?: string) => void;
 };
 
 export function TeamRoster({
@@ -91,7 +91,7 @@ function RosterColumn({
             {canRemovePlayers ? (
               <Pressable
                 style={styles.rosterRemoveButton}
-                onPress={() => onRemovePlayer?.(player.userId)}
+                onPress={() => onRemovePlayer?.(player.userId, publicHandle(player))}
                 accessibilityRole="button"
                 accessibilityLabel={`Quitar a ${publicHandle(player)} del partido`}
               >

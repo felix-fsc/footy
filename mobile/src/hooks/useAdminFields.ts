@@ -1,9 +1,9 @@
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Alert } from "react-native";
 import { DEFAULT_CITY } from "../constants/locations";
 import type { ApiRequest } from "../types/api";
 import type { SavedFieldResponse } from "../types/domain";
+import type { ShowFeedback } from "../types/feedback";
 
 type UseAdminFieldsOptions = {
   request: ApiRequest;
@@ -14,6 +14,7 @@ type UseAdminFieldsOptions = {
   onSelectSavedField: (field: SavedFieldResponse) => void;
   onClearSelectedSavedField: () => void;
   setLoading: Dispatch<SetStateAction<boolean>>;
+  showFeedback?: ShowFeedback;
 };
 
 export function useAdminFields({
@@ -25,6 +26,7 @@ export function useAdminFields({
   onSelectSavedField,
   onClearSelectedSavedField,
   setLoading,
+  showFeedback,
 }: UseAdminFieldsOptions) {
   const [savedFields, setSavedFields] = useState<SavedFieldResponse[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,10 +67,11 @@ export function useAdminFields({
       !Number.isFinite(latitudeValue) ||
       !Number.isFinite(longitudeValue)
     ) {
-      Alert.alert(
-        "Revisa la pista",
-        "Nombre, latitud y longitud son obligatorios.",
-      );
+      showFeedback?.({
+        kind: "warning",
+        title: "Revisa la pista",
+        message: "Nombre, latitud y longitud son obligatorios.",
+      });
       return;
     }
 
@@ -91,11 +94,17 @@ export function useAdminFields({
       await load();
       onSelectSavedField(saved);
       startCreate();
+      showFeedback?.({
+        kind: "success",
+        title: editingId ? "Pista actualizada" : "Pista guardada",
+        message: "La pista ya esta disponible para crear partidos.",
+      });
     } catch (error) {
-      Alert.alert(
-        "No se pudo guardar",
-        error instanceof Error ? error.message : "Error inesperado",
-      );
+      showFeedback?.({
+        kind: "error",
+        title: "No se pudo guardar",
+        message: error instanceof Error ? error.message : "Error inesperado",
+      });
     } finally {
       setLoading(false);
     }
@@ -110,6 +119,7 @@ export function useAdminFields({
     onSelectSavedField,
     request,
     setLoading,
+    showFeedback,
     startCreate,
   ]);
 
@@ -122,11 +132,17 @@ export function useAdminFields({
           onClearSelectedSavedField();
         }
         await load();
+        showFeedback?.({
+          kind: "success",
+          title: "Pista borrada",
+          message: "La pista se ha quitado de tus guardadas.",
+        });
       } catch (error) {
-        Alert.alert(
-          "No se pudo eliminar",
-          error instanceof Error ? error.message : "Error inesperado",
-        );
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo eliminar",
+          message: error instanceof Error ? error.message : "Error inesperado",
+        });
       } finally {
         setLoading(false);
       }
@@ -137,6 +153,7 @@ export function useAdminFields({
       request,
       selectedSavedFieldId,
       setLoading,
+      showFeedback,
     ],
   );
 

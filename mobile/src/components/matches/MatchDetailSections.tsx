@@ -179,7 +179,7 @@ type MatchPlayersSectionProps = {
   isAdmin: boolean;
   match: MatchResponse;
   onOpenProfile: (userId: string) => void;
-  onRemovePlayer: (matchId: string, userId: string) => void;
+  onRemovePlayer: (matchId: string, userId: string, playerName?: string) => void;
 };
 
 export function MatchPlayersSection({
@@ -202,7 +202,9 @@ export function MatchPlayersSection({
         match={match}
         onOpenProfile={onOpenProfile}
         canRemovePlayers={isAdmin}
-        onRemovePlayer={(userId) => onRemovePlayer(match.id, userId)}
+        onRemovePlayer={(userId, playerName) =>
+          onRemovePlayer(match.id, userId, playerName)
+        }
       />
     </View>
   );

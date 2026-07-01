@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
   Platform,
@@ -22,6 +23,7 @@ import {
 } from "../components/matches/MatchDetailSections";
 import { BottomNav } from "../components/navigation/BottomNav";
 import { PublicProfileModal } from "../components/profile/PublicProfileModal";
+import { ConfirmActionModal } from "../components/ui/ConfirmActionModal";
 import type {
   MatchResponse,
   MessageResponse,
@@ -38,7 +40,7 @@ type MatchDetailScreenProps = {
     onLeaveMatch: (matchId: string) => void;
     onOpenDirections: (match: MatchResponse) => void;
     onOpenProfile: (userId: string) => void;
-    onRemovePlayer: (matchId: string, userId: string) => void;
+    onRemovePlayer: (matchId: string, userId: string, playerName?: string) => void;
   };
   chat: {
     messageText: string;
@@ -91,6 +93,30 @@ export function MatchDetailScreen({
     selectedIsOwner,
     selectedIsParticipant,
   } = state;
+  const [pendingAction, setPendingAction] = useState<{
+    confirmLabel: string;
+    message: string;
+    title: string;
+    onConfirm: () => void;
+  } | null>(null);
+
+  function requestDangerAction(action: {
+    confirmLabel: string;
+    message: string;
+    title: string;
+    onConfirm: () => void;
+  }) {
+    setPendingAction(action);
+  }
+
+  function confirmPendingAction() {
+    const action = pendingAction;
+    if (!action) {
+      return;
+    }
+    setPendingAction(null);
+    action.onConfirm();
+  }
 
   return (
     <SafeAreaView style={styles.darkScreen}>
@@ -139,8 +165,24 @@ export function MatchDetailScreen({
                   <MatchAdminActions
                     loading={loading}
                     match={match}
-                    onCancelMatch={actions.onCancelMatch}
-                    onDeleteMatch={actions.onDeleteMatch}
+                    onCancelMatch={(matchId) =>
+                      requestDangerAction({
+                        title: "Cancelar partido",
+                        message:
+                          "El partido quedara marcado como cancelado y los jugadores lo veran asi en la app.",
+                        confirmLabel: "Cancelar partido",
+                        onConfirm: () => actions.onCancelMatch(matchId),
+                      })
+                    }
+                    onDeleteMatch={(matchId) =>
+                      requestDangerAction({
+                        title: "Borrar partido",
+                        message:
+                          "Esta accion eliminara el partido de forma permanente. No se podra recuperar desde la app.",
+                        confirmLabel: "Borrar",
+                        onConfirm: () => actions.onDeleteMatch(matchId),
+                      })
+                    }
                   />
                 ) : null}
 
@@ -148,7 +190,17 @@ export function MatchDetailScreen({
                   isAdmin={isAdmin}
                   match={match}
                   onOpenProfile={actions.onOpenProfile}
-                  onRemovePlayer={actions.onRemovePlayer}
+                  onRemovePlayer={(matchId, userId, playerName) =>
+                    requestDangerAction({
+                      title: "Quitar jugador",
+                      message: playerName
+                        ? `Vas a quitar a ${playerName} de este partido. Podra volver a unirse si quedan plazas.`
+                        : "Vas a quitar a este jugador del partido. Podra volver a unirse si quedan plazas.",
+                      confirmLabel: "Quitar",
+                      onConfirm: () =>
+                        actions.onRemovePlayer(matchId, userId, playerName),
+                    })
+                  }
                 />
 
                 <MatchJoinPanel
@@ -158,9 +210,25 @@ export function MatchDetailScreen({
                   selectedIsOpen={selectedIsOpen}
                   selectedIsOwner={selectedIsOwner}
                   selectedIsParticipant={selectedIsParticipant}
-                  onCancelMatch={actions.onCancelMatch}
+                  onCancelMatch={(matchId) =>
+                    requestDangerAction({
+                      title: "Cancelar partido",
+                      message:
+                        "El partido quedara marcado como cancelado para todos los jugadores.",
+                      confirmLabel: "Cancelar partido",
+                      onConfirm: () => actions.onCancelMatch(matchId),
+                    })
+                  }
                   onJoinMatch={actions.onJoinMatch}
-                  onLeaveMatch={actions.onLeaveMatch}
+                  onLeaveMatch={(matchId) =>
+                    requestDangerAction({
+                      title: "Salir del partido",
+                      message:
+                        "Se liberara tu plaza y dejaras de aparecer en la lista de jugadores.",
+                      confirmLabel: "Salir",
+                      onConfirm: () => actions.onLeaveMatch(matchId),
+                    })
+                  }
                 />
 
                 <MatchChatLauncher
@@ -204,6 +272,15 @@ export function MatchDetailScreen({
         onHome={navigation.onHome}
         onCreate={navigation.onCreate}
         onProfile={navigation.onProfile}
+      />
+      <ConfirmActionModal
+        visible={Boolean(pendingAction)}
+        loading={loading}
+        title={pendingAction?.title ?? ""}
+        message={pendingAction?.message ?? ""}
+        confirmLabel={pendingAction?.confirmLabel ?? "Confirmar"}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={confirmPendingAction}
       />
     </SafeAreaView>
   );

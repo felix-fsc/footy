@@ -3,6 +3,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApiRequest } from "./api/useApiRequest";
 import { AppTabRenderer } from "./components/app/AppTabRenderer";
 import { IntroVideoOverlay } from "./components/intro/IntroVideoOverlay";
+import { FeedbackToast } from "./components/ui/FeedbackToast";
 import { useAdminFields } from "./hooks/useAdminFields";
 import { useAndroidBackHandler } from "./hooks/useAndroidBackHandler";
 import { useAppLifecycle } from "./hooks/useAppLifecycle";
@@ -17,6 +18,7 @@ import { useMatches } from "./hooks/useMatches";
 import { useProfile } from "./hooks/useProfile";
 import { useProfileActions } from "./hooks/useProfileActions";
 import { useAppViewActions } from "./hooks/useAppViewActions";
+import { useFeedback } from "./hooks/useFeedback";
 import { AuthScreen } from "./screens/AuthScreen";
 import { LoadingScreen } from "./screens/LoadingScreen";
 import { getMatchDraftCity, getUserCity } from "./utils/appStateUtils";
@@ -35,6 +37,7 @@ export function AppContent() {
   } = authSession;
   const [loading, setLoading] = useState(false);
   const [showIntroVideo, setShowIntroVideo] = useState(true);
+  const feedback = useFeedback();
   const profileState = useProfile();
 
   const matchDraft = useMatchDraft();
@@ -66,6 +69,7 @@ export function AppContent() {
     onSelectSavedField: matchDraft.selectSavedField,
     onClearSelectedSavedField: matchDraft.clearSelectedSavedField,
     setLoading,
+    showFeedback: feedback.showFeedback,
   });
 
   const matchActions = useMatchActions({
@@ -77,6 +81,7 @@ export function AppContent() {
     setLoading,
     setSelectedMatchId: matchesState.setSelectedMatchId,
     setAppTab: navigation.setAppTab,
+    showFeedback: feedback.showFeedback,
   });
   const matchEditorActions = useMatchEditorActions({
     request,
@@ -86,6 +91,7 @@ export function AppContent() {
     setLoading,
     setSelectedMatchId: matchesState.setSelectedMatchId,
     setAppTab: navigation.setAppTab,
+    showFeedback: feedback.showFeedback,
   });
   const profileActions = useProfileActions({
     request,
@@ -174,26 +180,33 @@ export function AppContent() {
   }
 
   return (
-    <AppTabRenderer
-      adminFields={adminFields}
-      bottomInset={safeInsets.bottom}
-      currentUserId={currentUserId}
-      homeActions={homeActions}
-      isAdmin={isAdmin}
-      loading={loading}
-      matchActions={matchActions}
-      matchDraft={matchDraft}
-      matchDraftCity={matchDraftCity}
-      matchEditorActions={matchEditorActions}
-      matchesState={matchesState}
-      navigation={navigation}
-      onLogout={authActions.logout}
-      profileActions={profileActions}
-      profileState={profileState}
-      topInset={safeInsets.top}
-      userCity={userCity}
-      userName={userName}
-      viewActions={viewActions}
-    />
+    <>
+      <AppTabRenderer
+        adminFields={adminFields}
+        bottomInset={safeInsets.bottom}
+        currentUserId={currentUserId}
+        homeActions={homeActions}
+        isAdmin={isAdmin}
+        loading={loading}
+        matchActions={matchActions}
+        matchDraft={matchDraft}
+        matchDraftCity={matchDraftCity}
+        matchEditorActions={matchEditorActions}
+        matchesState={matchesState}
+        navigation={navigation}
+        onLogout={authActions.logout}
+        profileActions={profileActions}
+        profileState={profileState}
+        topInset={safeInsets.top}
+        userCity={userCity}
+        userName={userName}
+        viewActions={viewActions}
+      />
+      <FeedbackToast
+        feedback={feedback.feedback}
+        topInset={safeInsets.top}
+        onDismiss={feedback.clearFeedback}
+      />
+    </>
   );
 }

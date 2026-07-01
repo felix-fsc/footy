@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Alert } from "react-native";
 import type {
   AppTab,
   MatchResponse,
@@ -8,6 +7,7 @@ import type {
   TeamSide,
 } from "../types/domain";
 import type { ApiRequest } from "../types/api";
+import type { ShowFeedback } from "../types/feedback";
 import { matchMutationErrorMessage } from "../utils/authUtils";
 
 type UseMatchActionsOptions = {
@@ -19,6 +19,7 @@ type UseMatchActionsOptions = {
   setLoading: Dispatch<SetStateAction<boolean>>;
   setSelectedMatchId: Dispatch<SetStateAction<string | null>>;
   setAppTab: Dispatch<SetStateAction<AppTab>>;
+  showFeedback?: ShowFeedback;
 };
 
 export function useMatchActions({
@@ -30,6 +31,7 @@ export function useMatchActions({
   setLoading,
   setSelectedMatchId,
   setAppTab,
+  showFeedback,
 }: UseMatchActionsOptions) {
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [messageText, setMessageText] = useState("");
@@ -76,13 +78,22 @@ export function useMatchActions({
         setSelectedMatchId(null);
         setMessages([]);
         setAppTab("home");
+        showFeedback?.({
+          kind: "success",
+          title: "Partido borrado",
+          message: "El partido se ha eliminado correctamente.",
+        });
       } catch (error) {
-        Alert.alert("No se pudo borrar", matchMutationErrorMessage(error));
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo borrar",
+          message: matchMutationErrorMessage(error),
+        });
       } finally {
         setLoading(false);
       }
     },
-    [loadMatches, request, setAppTab, setLoading, setSelectedMatchId],
+    [loadMatches, request, setAppTab, setLoading, setSelectedMatchId, showFeedback],
   );
 
   const removeMatchPlayer = useCallback(
@@ -95,13 +106,22 @@ export function useMatchActions({
         );
         await loadMatches();
         setSelectedMatchId(updated.id);
+        showFeedback?.({
+          kind: "success",
+          title: "Jugador quitado",
+          message: "La plaza ha quedado libre en el partido.",
+        });
       } catch (error) {
-        Alert.alert("No se pudo quitar", matchMutationErrorMessage(error));
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo quitar",
+          message: matchMutationErrorMessage(error),
+        });
       } finally {
         setLoading(false);
       }
     },
-    [loadMatches, request, setLoading, setSelectedMatchId],
+    [loadMatches, request, setLoading, setSelectedMatchId, showFeedback],
   );
 
   const joinMatch = useCallback(
@@ -116,16 +136,22 @@ export function useMatchActions({
         if (appTab === "detail") {
           await loadMessages(matchId).catch(() => setMessages([]));
         }
+        showFeedback?.({
+          kind: "success",
+          title: "Te has unido",
+          message: `Ya apareces en el equipo ${teamSide}.`,
+        });
       } catch (error) {
-        Alert.alert(
-          "No se pudo unir",
-          error instanceof Error ? error.message : "Error inesperado",
-        );
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo unir",
+          message: error instanceof Error ? error.message : "Error inesperado",
+        });
       } finally {
         setLoading(false);
       }
     },
-    [appTab, loadMatches, loadMessages, request, setLoading],
+    [appTab, loadMatches, loadMessages, request, setLoading, showFeedback],
   );
 
   const cancelMatch = useCallback(
@@ -140,16 +166,22 @@ export function useMatchActions({
         );
         await loadMatches();
         setSelectedMatchId(cancelled.id);
+        showFeedback?.({
+          kind: "success",
+          title: "Partido cancelado",
+          message: "Los jugadores veran el partido como cancelado.",
+        });
       } catch (error) {
-        Alert.alert(
-          "No se pudo cancelar",
-          error instanceof Error ? error.message : "Error inesperado",
-        );
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo cancelar",
+          message: error instanceof Error ? error.message : "Error inesperado",
+        });
       } finally {
         setLoading(false);
       }
     },
-    [loadMatches, request, setLoading, setSelectedMatchId],
+    [loadMatches, request, setLoading, setSelectedMatchId, showFeedback],
   );
 
   const leaveMatch = useCallback(
@@ -159,16 +191,22 @@ export function useMatchActions({
         await request(`/api/matches/${matchId}/leave`, { method: "DELETE" });
         await loadMatches();
         setMessages([]);
+        showFeedback?.({
+          kind: "success",
+          title: "Has salido",
+          message: "Tu plaza vuelve a estar disponible.",
+        });
       } catch (error) {
-        Alert.alert(
-          "No se pudo salir",
-          error instanceof Error ? error.message : "Error inesperado",
-        );
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo salir",
+          message: error instanceof Error ? error.message : "Error inesperado",
+        });
       } finally {
         setLoading(false);
       }
     },
-    [loadMatches, request, setLoading],
+    [loadMatches, request, setLoading, showFeedback],
   );
 
   const sendMatchMessage = useCallback(
@@ -186,17 +224,19 @@ export function useMatchActions({
         setMessageText("");
         await loadMessages(selectedMatch.id);
       } catch (error) {
-        Alert.alert(
-          "No se pudo enviar",
-          error instanceof Error
-            ? error.message
-            : "Unete al partido antes de escribir.",
-        );
+        showFeedback?.({
+          kind: "error",
+          title: "No se pudo enviar",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unete al partido antes de escribir.",
+        });
       } finally {
         setLoading(false);
       }
     },
-    [loadMessages, request, selectedMatch, setLoading],
+    [loadMessages, request, selectedMatch, setLoading, showFeedback],
   );
 
   const sendMessage = useCallback(async () => {
