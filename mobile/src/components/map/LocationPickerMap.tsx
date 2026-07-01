@@ -1,20 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  Image,
   PanResponder,
   Platform,
-  Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import { LocationTargetIcon } from "../icons/AppIcons";
+import { LocationPickerOverlay } from "./LocationPickerOverlay";
+import { MapOverlay, MapTileCanvas } from "./MapTileCanvas";
 import type { MapLocation } from "../../types/domain";
 import { useLocationSearch } from "../../hooks/useLocationSearch";
 import {
-  MAP_TILE_SIZE,
   clampMapZoom,
   getCenterAfterDrag,
   getLocationFromScreenPoint,
@@ -23,10 +19,8 @@ import {
   getTouchDistance,
   getVisibleTiles,
   projectLocation,
-  getWheelZoomDelta,
 } from "../../utils/mapUtils";
-
-const LOCATION_PICKER_EDGE_PADDING = 10;
+import { useMapWheelZoom } from "./useMapWheelZoom";
 
 type LocationPickerMapProps = {
   value: MapLocation;
@@ -52,7 +46,6 @@ export function LocationPickerMap({
   const pinchStartZoom = useRef(15);
   const pinchActive = useRef(false);
   const skipNextCenterSync = useRef(false);
-  const lastWheelZoomAt = useRef(0);
   const resetMapPosition = useCallback((location: MapLocation) => {
     setCenter(location);
     setDragOffset({ x: 0, y: 0 });
@@ -115,10 +108,10 @@ export function LocationPickerMap({
     setDragOffset({ x: 0, y: 0 });
   }
 
-  function applyZoomDelta(delta: number) {
+  const applyZoomDelta = useCallback((delta: number) => {
     setZoom((current) => clampMapZoom(current + delta));
     setDragOffset({ x: 0, y: 0 });
-  }
+  }, []);
 
   const panResponder = useMemo(
     () =>
@@ -179,33 +172,7 @@ export function LocationPickerMap({
     [canvas.left, canvas.top, center, mapData.topLeft, onChange, zoom],
   );
 
-  const mapWheelProps =
-    Platform.OS === "web"
-      ? ({
-          onWheel: (event: {
-            deltaY?: number;
-            nativeEvent?: { deltaY?: number };
-            preventDefault?: () => void;
-          }) => {
-            event.preventDefault?.();
-            const deltaY = event.deltaY ?? event.nativeEvent?.deltaY ?? 0;
-            if (Math.abs(deltaY) < 4) {
-              return;
-            }
-            const now = Date.now();
-            const zoomDelta = getWheelZoomDelta({
-              deltaY,
-              lastZoomAt: lastWheelZoomAt.current,
-              now,
-            });
-            if (zoomDelta === 0) {
-              return;
-            }
-            lastWheelZoomAt.current = now;
-            applyZoomDelta(zoomDelta);
-          },
-        } as object)
-      : {};
+  const mapWheelProps = useMapWheelZoom(applyZoomDelta);
 
   return (
     <View
@@ -214,37 +181,12 @@ export function LocationPickerMap({
       {...mapWheelProps}
     >
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
-        <View
-          style={[
-            styles.mapCanvas,
-            {
-              left: canvas.left,
-              top: canvas.top,
-              width: canvas.width,
-              height: canvas.height,
-              transform: [
-                { translateX: dragOffset.x },
-                { translateY: dragOffset.y },
-              ],
-            },
-          ]}
+        <MapTileCanvas
+          canvas={canvas}
+          dragOffset={dragOffset}
+          tiles={mapData.tiles}
         >
-          {mapData.tiles.map((tile) => (
-            <Image
-              key={tile.key}
-              source={{ uri: tile.uri }}
-              style={[
-                styles.mapTile,
-                {
-                  left: tile.x,
-                  top: tile.y,
-                  width: MAP_TILE_SIZE,
-                  height: MAP_TILE_SIZE,
-                },
-              ]}
-            />
-          ))}
-          <View style={[styles.mapOverlay, styles.noPointerEvents]} />
+          <MapOverlay />
           <View
             style={[
               styles.locationPickedMarker,
@@ -257,35 +199,16 @@ export function LocationPickerMap({
           >
             <LocationTargetIcon />
           </View>
-        </View>
+        </MapTileCanvas>
       </View>
-      <View style={styles.locationSearchPanel}>
-        <TextInput
-          style={styles.locationSearchInput}
-          value={locationSearch}
-          onChangeText={setLocationSearch}
-          placeholder={`Buscar calle cerca de ${fieldName || city || "la pista"}`}
-          placeholderTextColor="rgba(227,219,208,0.62)"
-          returnKeyType="search"
-          onSubmitEditing={searchLocation}
-        />
-        <Pressable
-          style={styles.locationSearchButton}
-          onPress={searchLocation}
-          disabled={locationSearching}
-        >
-          {locationSearching ? (
-            <ActivityIndicator color="#0A110E" />
-          ) : (
-            <Text style={styles.locationSearchButtonText}>Buscar</Text>
-          )}
-        </Pressable>
-      </View>
-      <View style={styles.locationPickerHint}>
-        <Text style={styles.locationPickerHintText}>
-          Toca el mapa para fijar la pista
-        </Text>
-      </View>
+      <LocationPickerOverlay
+        city={city}
+        fieldName={fieldName}
+        locationSearch={locationSearch}
+        locationSearching={locationSearching}
+        onLocationSearchChange={setLocationSearch}
+        onSearchLocation={searchLocation}
+      />
     </View>
   );
 }
@@ -296,71 +219,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "#000000",
   },
-  mapCanvas: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    overflow: "hidden",
-    backgroundColor: "#C8D2C4",
-  },
-  mapTile: { position: "absolute" },
-  mapOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "rgba(52,52,52,0.08)",
-  },
-  locationSearchPanel: {
-    position: "absolute",
-    top: 14,
-    left: LOCATION_PICKER_EDGE_PADDING,
-    right: LOCATION_PICKER_EDGE_PADDING,
-    zIndex: 12,
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  locationSearchInput: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 14,
-    backgroundColor: "rgba(10,17,14,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(227,219,208,0.18)",
-    color: "#F7F1E8",
-    paddingHorizontal: 14,
-    fontSize: 14,
-    fontWeight: "800",
-  },
-  locationSearchButton: {
-    minHeight: 44,
-    minWidth: 82,
-    borderRadius: 14,
-    backgroundColor: "#B7F36B",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-  },
-  locationSearchButtonText: {
-    color: "#0A110E",
-    fontSize: 9,
-    fontWeight: "900",
-    textTransform: "uppercase",
-  },
-  locationPickerHint: {
-    position: "absolute",
-    left: 18,
-    top: 70,
-    minHeight: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(10,17,14,0.78)",
-    paddingHorizontal: 14,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  locationPickerHintText: { color: "#E3DBD0", fontSize: 12, fontWeight: "900" },
   locationPickedMarker: {
     position: "absolute",
     width: 22,

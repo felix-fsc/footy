@@ -1,9 +1,6 @@
-import * as Location from "expo-location";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Image,
   PanResponder,
   Platform,
   Pressable,
@@ -14,7 +11,6 @@ import {
 import type { MapLocation, MatchResponse } from "../../types/domain";
 import {
   MAP_DEFAULT_ZOOM,
-  MAP_TILE_SIZE,
   clampMapZoom,
   getCityMapCenter,
   getCenterAfterDrag,
@@ -28,11 +24,13 @@ import {
   getTouchDistance,
   getVisibleTiles,
   projectLocation,
-  getWheelZoomDelta,
 } from "../../utils/mapUtils";
 import { platformShadow } from "../../utils/styleUtils";
 import { LocationTargetIcon } from "../icons/AppIcons";
+import { MapOverlay, MapTileCanvas } from "./MapTileCanvas";
 import { SelectedPopup } from "./SelectedPopup";
+import { useMapWheelZoom } from "./useMapWheelZoom";
+import { useUserMapLocation } from "./useUserMapLocation";
 
 const MARKER_SIZE = 44;
 
@@ -62,7 +60,10 @@ export function MapHome({
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(MAP_DEFAULT_ZOOM);
-  const [userLocation, setUserLocation] = useState<MapLocation | null>(null);
+  const resetDragOffset = useCallback(() => {
+    setDragOffset({ x: 0, y: 0 });
+  }, []);
+  const { userLocation, useMyLocation } = useUserMapLocation(resetDragOffset);
   const suggestedCenter = useMemo(
     () => getMapCenter(matches, userLocation),
     [matches, userLocation],
@@ -76,7 +77,6 @@ export function MapHome({
   const pinchStartDistance = useRef(0);
   const pinchStartZoom = useRef(MAP_DEFAULT_ZOOM);
   const pinchActive = useRef(false);
-  const lastWheelZoomAt = useRef(0);
 
   useEffect(() => {
     if (!initializedCenter.current || userLocation) {
@@ -176,10 +176,10 @@ export function MapHome({
     onClearSelection();
   }
 
-  function applyZoomDelta(delta: number) {
+  const applyZoomDelta = useCallback((delta: number) => {
     setZoom((current) => clampMapZoom(current + delta));
     setDragOffset({ x: 0, y: 0 });
-  }
+  }, []);
 
   const panResponder = useMemo(
     () =>
@@ -250,88 +250,7 @@ export function MapHome({
     [canvas.left, canvas.top, mapCenter, markerCoordinates, fieldGroups, zoom],
   );
 
-  const mapWheelProps =
-    Platform.OS === "web"
-      ? ({
-          onWheel: (event: {
-            deltaY?: number;
-            nativeEvent?: { deltaY?: number };
-            preventDefault?: () => void;
-          }) => {
-            event.preventDefault?.();
-            const deltaY = event.deltaY ?? event.nativeEvent?.deltaY ?? 0;
-            if (Math.abs(deltaY) < 4) {
-              return;
-            }
-            const now = Date.now();
-            const zoomDelta = getWheelZoomDelta({
-              deltaY,
-              lastZoomAt: lastWheelZoomAt.current,
-              now,
-            });
-            if (zoomDelta === 0) {
-              return;
-            }
-            lastWheelZoomAt.current = now;
-            applyZoomDelta(zoomDelta);
-          },
-        } as object)
-      : {};
-
-  async function useMyLocation() {
-    try {
-      if (Platform.OS === "web") {
-        if (!("geolocation" in navigator)) {
-          Alert.alert(
-            "Ubicacion no disponible",
-            "Este navegador no expone geolocalizacion.",
-          );
-          return;
-        }
-
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setUserLocation({
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            });
-            setDragOffset({ x: 0, y: 0 });
-          },
-          () => {
-            Alert.alert(
-              "No se pudo usar tu ubicacion",
-              "Revisa permisos de ubicacion del navegador.",
-            );
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
-        );
-        return;
-      }
-
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert(
-          "Permiso de ubicacion necesario",
-          "Activa la ubicacion para centrar el mapa en tu posicion.",
-        );
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setUserLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-      setDragOffset({ x: 0, y: 0 });
-    } catch {
-      Alert.alert(
-        "No se pudo usar tu ubicacion",
-        "Revisa que la ubicacion del dispositivo este activada.",
-      );
-    }
-  }
+  const mapWheelProps = useMapWheelZoom(applyZoomDelta);
 
   return (
     <View
@@ -340,41 +259,16 @@ export function MapHome({
       {...mapWheelProps}
     >
       <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
-        <View
-          style={[
-            styles.mapCanvas,
-            {
-              left: canvas.left,
-              top: canvas.top,
-              width: canvas.width,
-              height: canvas.height,
-              transform: [
-                { translateX: dragOffset.x },
-                { translateY: dragOffset.y },
-              ],
-            },
-          ]}
+        <MapTileCanvas
+          canvas={canvas}
+          dragOffset={dragOffset}
+          tiles={mapData.tiles}
         >
-          {mapData.tiles.map((tile) => (
-            <Image
-              key={tile.key}
-              source={{ uri: tile.uri }}
-              style={[
-                styles.mapTile,
-                {
-                  left: tile.x,
-                  top: tile.y,
-                  width: MAP_TILE_SIZE,
-                  height: MAP_TILE_SIZE,
-                },
-              ]}
-            />
-          ))}
           <Pressable
             style={StyleSheet.absoluteFill}
             onPress={onClearSelection}
           >
-            <View style={[styles.mapOverlay, styles.noPointerEvents]} />
+            <MapOverlay />
           </Pressable>
           {fieldGroups.map((group, index) => {
             const coordinate = markerCoordinates[index];
@@ -443,7 +337,7 @@ export function MapHome({
               ]}
             />
           ) : null}
-        </View>
+        </MapTileCanvas>
       </View>
       <Pressable style={styles.mapLocationButton} onPress={useMyLocation}>
         <LocationTargetIcon />
@@ -479,22 +373,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: Platform.OS === "web" ? 28 : 0,
     overflow: "hidden",
     backgroundColor: "#000000",
-  },
-  mapCanvas: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    overflow: "hidden",
-    backgroundColor: "#C8D2C4",
-  },
-  mapTile: { position: "absolute" },
-  mapOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: "rgba(52,52,52,0.08)",
   },
   mapLocationButton: {
     position: "absolute",

@@ -13,7 +13,7 @@ import {
   CreateMatchForm,
   EditMatchBanner,
 } from "../components/editor/CreateMatchSections";
-import { CreatePreviewModal } from "../components/editor/MatchEditorControls";
+import { CreatePreviewModal } from "../components/editor/CreatePreviewModal";
 import { BottomNav } from "../components/navigation/BottomNav";
 import type { MatchResponse, SavedFieldResponse } from "../types/domain";
 
