@@ -1,4 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Entrance, motionStyles } from "../ui/Motion";
 
 const LOCATION_PICKER_EDGE_PADDING = 10;
 
@@ -21,7 +22,7 @@ export function LocationPickerOverlay({
 }: LocationPickerOverlayProps) {
   return (
     <>
-      <View style={styles.locationSearchPanel}>
+      <Entrance style={styles.locationSearchPanel} distance={12}>
         <TextInput
           style={styles.locationSearchInput}
           value={locationSearch}
@@ -32,9 +33,13 @@ export function LocationPickerOverlay({
           onSubmitEditing={onSearchLocation}
         />
         <Pressable
-          style={styles.locationSearchButton}
+          style={({ pressed }) => [
+            styles.locationSearchButton,
+            pressed && motionStyles.pressGlow,
+          ]}
           onPress={onSearchLocation}
           disabled={locationSearching}
+          android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
         >
           {locationSearching ? (
             <ActivityIndicator color="#0A110E" />
@@ -42,12 +47,12 @@ export function LocationPickerOverlay({
             <Text style={styles.locationSearchButtonText}>Buscar</Text>
           )}
         </Pressable>
-      </View>
-      <View style={styles.locationPickerHint}>
+      </Entrance>
+      <Entrance style={styles.locationPickerHint} delay={70} distance={10}>
         <Text style={styles.locationPickerHintText}>
           Toca el mapa para fijar la pista
         </Text>
-      </View>
+      </Entrance>
     </>
   );
 }

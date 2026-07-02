@@ -6,12 +6,11 @@ import {
   formatDate,
   formatDurationMinutes,
   formatPriceFromCents,
-  isTeamFull,
   publicHandle,
 } from "../../utils/matchUtils";
 import { platformShadow } from "../../utils/styleUtils";
 import { MatchImageBackground } from "./MatchMedia";
-import { TeamOccupancy, TeamRoster } from "./TeamRoster";
+import { TeamRoster } from "./TeamRoster";
 
 type MatchHeroProps = {
   isAdmin: boolean;
@@ -46,12 +45,13 @@ export function MatchHero({
             <Pressable
               style={({ pressed }) => [
                 styles.adminFloatingEditButton,
-                pressed && styles.adminFloatingButtonPressed,
+                pressed && styles.actionPressGlow,
               ]}
               onPress={() => onEditMatch(match)}
               disabled={loading}
               accessibilityRole="button"
               accessibilityLabel="Editar partido"
+              android_ripple={{ color: "rgba(143,234,106,0.22)", borderless: true }}
             >
               <PencilIcon />
             </Pressable>
@@ -107,34 +107,32 @@ export function MatchLocationCard({
   onOpenProfile,
 }: MatchLocationCardProps) {
   return (
-    <>
-      <View style={styles.detailLocationCard}>
-        <View style={styles.detailLocationIcon}>
-          <LocationTargetIcon />
-        </View>
-        <View style={styles.detailLocationTextWrap}>
-          <Text style={styles.detailLocationTitle} numberOfLines={1}>
-            {match.field?.name ?? "Campo por confirmar"}
-          </Text>
-          <Text style={styles.detailLocationMeta} numberOfLines={2}>
-            {match.field?.address ?? "Direccion pendiente"} -{" "}
-            {match.field?.city ?? "Sin ciudad"}
-          </Text>
-          <Pressable onPress={() => onOpenProfile(match.createdBy.id)}>
-            <Text style={styles.detailOrganizer} numberOfLines={1}>
-              Organiza {publicHandle(match.createdBy)}
-            </Text>
-          </Pressable>
-        </View>
+    <View style={styles.detailLocationCard}>
+      <View style={styles.detailLocationIcon}>
+        <LocationTargetIcon />
       </View>
-
+      <View style={styles.detailLocationTextWrap}>
+        <Text style={styles.detailLocationTitle} numberOfLines={1}>
+          {match.field?.name ?? "Campo por confirmar"}
+        </Text>
+        <Text style={styles.detailLocationMeta} numberOfLines={2}>
+          {match.field?.address ?? "Direccion pendiente"} -{" "}
+          {match.field?.city ?? "Sin ciudad"}
+        </Text>
+        <Pressable onPress={() => onOpenProfile(match.createdBy.id)}>
+          <Text style={styles.detailOrganizer} numberOfLines={1}>
+            Organiza {publicHandle(match.createdBy)}
+          </Text>
+        </Pressable>
+      </View>
       <Pressable
-        style={styles.directionsButton}
+        style={({ pressed }) => [styles.directionsButton, pressed && styles.actionPressGlow]}
         onPress={() => onOpenDirections(match)}
+        android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
       >
         <Text style={styles.directionsButtonText}>Como llegar</Text>
       </Pressable>
-    </>
+    </View>
   );
 }
 
@@ -157,10 +155,11 @@ export function MatchAdminActions({
         <Pressable
           style={({ pressed }) => [
             styles.adminInlineActionButton,
-            pressed && styles.inlineActionPressed,
+            pressed && styles.dangerPressGlow,
           ]}
           onPress={() => onCancelMatch(match.id)}
           disabled={loading}
+          android_ripple={{ color: "rgba(217,88,88,0.20)", borderless: false }}
         >
           <Text style={styles.adminInlineActionText}>Cancelar</Text>
         </Pressable>
@@ -169,10 +168,11 @@ export function MatchAdminActions({
         style={({ pressed }) => [
           styles.adminInlineActionButton,
           styles.adminInlineDangerButton,
-          pressed && styles.inlineActionPressed,
+          pressed && styles.dangerPressGlow,
         ]}
         onPress={() => onDeleteMatch(match.id)}
         disabled={loading}
+        android_ripple={{ color: "rgba(217,88,88,0.22)", borderless: false }}
       >
         <Text style={[styles.adminInlineActionText, styles.adminInlineDangerText]}>
           Borrar
@@ -184,41 +184,6 @@ export function MatchAdminActions({
 
 type MatchPlayersSectionProps = {
   isAdmin: boolean;
-  match: MatchResponse;
-  onOpenProfile: (userId: string) => void;
-  onRemovePlayer: (matchId: string, userId: string, playerName?: string) => void;
-};
-
-export function MatchPlayersSection({
-  isAdmin,
-  match,
-  onOpenProfile,
-  onRemovePlayer,
-}: MatchPlayersSectionProps) {
-  return (
-    <View style={styles.detailSection}>
-      <View style={styles.detailSectionHeader}>
-        <Text style={styles.detailSectionTitle}>Jugadores</Text>
-        <Text style={styles.detailSectionMeta}>
-          {(match.occupancy?.totalPlayers ?? 0)}/
-          {match.occupancy?.totalCapacity ?? match.maxPlayersPerTeam * 2}
-        </Text>
-      </View>
-      <TeamOccupancy match={match} />
-      <TeamRoster
-        match={match}
-        onOpenProfile={onOpenProfile}
-        canRemovePlayers={isAdmin}
-        onRemovePlayer={(userId, playerName) =>
-          onRemovePlayer(match.id, userId, playerName)
-        }
-      />
-    </View>
-  );
-}
-
-type MatchJoinPanelProps = {
-  isAdmin: boolean;
   loading: boolean;
   match: MatchResponse;
   selectedIsOpen: boolean;
@@ -227,9 +192,11 @@ type MatchJoinPanelProps = {
   onCancelMatch: (matchId: string) => void;
   onJoinMatch: (matchId: string, teamSide: TeamSide) => void;
   onLeaveMatch: (matchId: string) => void;
+  onOpenProfile: (userId: string) => void;
+  onRemovePlayer: (matchId: string, userId: string, playerName?: string) => void;
 };
 
-export function MatchJoinPanel({
+export function MatchPlayersSection({
   isAdmin,
   loading,
   match,
@@ -239,14 +206,73 @@ export function MatchJoinPanel({
   onCancelMatch,
   onJoinMatch,
   onLeaveMatch,
-}: MatchJoinPanelProps) {
+  onOpenProfile,
+  onRemovePlayer,
+}: MatchPlayersSectionProps) {
   return (
-    <View style={styles.detailActionPanel}>
+    <View style={styles.detailSection}>
+      <View style={styles.detailSectionHeader}>
+        <Text style={styles.detailSectionTitle}>Equipos</Text>
+        <Text style={styles.detailSectionMeta}>
+          {(match.occupancy?.totalPlayers ?? 0)}/
+          {match.occupancy?.totalCapacity ?? match.maxPlayersPerTeam * 2}
+        </Text>
+      </View>
+      <TeamRoster
+        match={match}
+        loading={loading}
+        selectedIsOpen={selectedIsOpen}
+        selectedIsParticipant={selectedIsParticipant}
+        onJoinTeam={(teamSide) => onJoinMatch(match.id, teamSide)}
+        onOpenProfile={onOpenProfile}
+        canRemovePlayers={isAdmin}
+        onRemovePlayer={(userId, playerName) =>
+          onRemovePlayer(match.id, userId, playerName)
+        }
+      />
+      <MatchParticipationActions
+        isAdmin={isAdmin}
+        loading={loading}
+        match={match}
+        selectedIsOwner={selectedIsOwner}
+        selectedIsParticipant={selectedIsParticipant}
+        onCancelMatch={onCancelMatch}
+        onLeaveMatch={onLeaveMatch}
+      />
+    </View>
+  );
+}
+
+type MatchParticipationActionsProps = {
+  isAdmin: boolean;
+  loading: boolean;
+  match: MatchResponse;
+  selectedIsOwner: boolean;
+  selectedIsParticipant: boolean;
+  onCancelMatch: (matchId: string) => void;
+  onLeaveMatch: (matchId: string) => void;
+};
+
+function MatchParticipationActions({
+  isAdmin,
+  loading,
+  match,
+  selectedIsOwner,
+  selectedIsParticipant,
+  onCancelMatch,
+  onLeaveMatch,
+}: MatchParticipationActionsProps) {
+  return (
+    <View style={styles.detailInlinePanel}>
       {selectedIsParticipant && match.status !== "CANCELLED" ? (
         <Pressable
-          style={styles.ghostDangerButton}
+          style={({ pressed }) => [
+            styles.ghostDangerButton,
+            pressed && styles.dangerPressGlow,
+          ]}
           onPress={() => onLeaveMatch(match.id)}
           disabled={loading}
+          android_ripple={{ color: "rgba(217,88,88,0.18)", borderless: false }}
         >
           <Text style={styles.ghostDangerText}>Salir del partido</Text>
         </Pressable>
@@ -256,44 +282,16 @@ export function MatchJoinPanel({
             {match.status === "FULL" ? "Partido completo" : "Partido cancelado"}
           </Text>
         </View>
-      ) : (
-        <>
-          <Text style={styles.detailActionTitle}>Elige equipo para apuntarte</Text>
-          <View style={styles.cardActions}>
-            <Pressable
-              style={[
-                styles.darkJoinButton,
-                (loading || !selectedIsOpen || isTeamFull(match, "A")) &&
-                  styles.actionButtonDisabled,
-              ]}
-              onPress={() => onJoinMatch(match.id, "A")}
-              disabled={loading || !selectedIsOpen || isTeamFull(match, "A")}
-            >
-              <Text style={styles.darkJoinText}>
-                {isTeamFull(match, "A") ? "Completo" : "Equipo A"}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.limeJoinButton,
-                (loading || !selectedIsOpen || isTeamFull(match, "B")) &&
-                  styles.actionButtonDisabled,
-              ]}
-              onPress={() => onJoinMatch(match.id, "B")}
-              disabled={loading || !selectedIsOpen || isTeamFull(match, "B")}
-            >
-              <Text style={styles.limeJoinText}>
-                {isTeamFull(match, "B") ? "Completo" : "Equipo B"}
-              </Text>
-            </Pressable>
-          </View>
-        </>
-      )}
+      ) : null}
       {selectedIsOwner && !isAdmin && match.status !== "CANCELLED" ? (
         <Pressable
-          style={styles.cancelMatchButton}
+          style={({ pressed }) => [
+            styles.cancelMatchButton,
+            pressed && styles.dangerPressGlow,
+          ]}
           onPress={() => onCancelMatch(match.id)}
           disabled={loading}
+          android_ripple={{ color: "rgba(255,255,255,0.18)", borderless: false }}
         >
           <Text style={styles.cancelMatchText}>Cancelar partido</Text>
         </Pressable>
@@ -316,7 +314,14 @@ export function MatchChatLauncher({
   onOpenChat,
 }: MatchChatLauncherProps) {
   return (
-    <Pressable style={styles.detailChatLauncher} onPress={() => onOpenChat(matchId)}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.detailChatLauncher,
+        pressed && styles.actionPressGlow,
+      ]}
+      onPress={() => onOpenChat(matchId)}
+      android_ripple={{ color: "rgba(143,234,106,0.18)", borderless: false }}
+    >
       <View style={styles.detailChatIcon}>
         <View style={styles.detailChatBubbleShape}>
           <View style={styles.detailChatDot} />
@@ -414,7 +419,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...platformShadow({ opacity: 0.22, radius: 12, y: 8 }),
   },
-  adminFloatingButtonPressed: { opacity: 0.78, transform: [{ scale: 0.96 }] },
+  actionPressGlow: {
+    backgroundColor: "rgba(143,234,106,0.24)",
+    borderColor: "rgba(143,234,106,0.86)",
+    shadowColor: "#8FEA6A",
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+    transform: [{ scale: 0.98 }],
+  },
+  dangerPressGlow: {
+    backgroundColor: "rgba(217,88,88,0.28)",
+    borderColor: "rgba(217,88,88,0.78)",
+    shadowColor: "#D95858",
+    shadowOpacity: 0.3,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+    transform: [{ scale: 0.98 }],
+  },
   detailCoverContent: { gap: 7 },
   detailTitle: {
     color: "#F7F1E8",
@@ -427,34 +451,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
-  detailInfoGrid: { flexDirection: "row", gap: 10 },
+  detailInfoGrid: { flexDirection: "row", gap: 8 },
   detailInfoCard: {
     flex: 1,
-    minHeight: 74,
-    borderRadius: 20,
-    backgroundColor: "rgba(247,241,232,0.10)",
+    minHeight: 56,
+    borderRadius: 15,
+    backgroundColor: "rgba(247,241,232,0.075)",
     borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.10)",
-    padding: 12,
+    borderColor: "rgba(247,241,232,0.12)",
+    paddingHorizontal: 7,
+    paddingVertical: 7,
+    alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 3,
   },
   detailInfoLabel: {
     color: "rgba(247,241,232,0.58)",
-    fontSize: 10,
+    fontSize: 8,
     fontWeight: "900",
     textTransform: "uppercase",
+    textAlign: "center",
   },
   detailInfoValue: {
     color: "#F7F1E8",
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: "900",
-    lineHeight: 18,
+    lineHeight: 14,
+    textAlign: "center",
   },
   detailLocationCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
     borderRadius: 22,
     backgroundColor: "rgba(143,234,106,0.12)",
     borderWidth: 1,
@@ -486,13 +514,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   directionsButton: {
-    minHeight: 46,
-    borderRadius: 20,
+    minWidth: 92,
+    minHeight: 42,
+    borderRadius: 18,
     backgroundColor: "#8FEA6A",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 10,
   },
-  directionsButtonText: { color: "#0A110E", fontSize: 13, fontWeight: "900" },
+  directionsButtonText: {
+    color: "#0A110E",
+    fontSize: 11,
+    fontWeight: "900",
+    textAlign: "center",
+  },
   detailAdminInlineActions: { flexDirection: "row", gap: 8 },
   adminInlineActionButton: {
     flex: 1,
@@ -508,7 +543,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(217,88,88,0.22)",
     borderColor: "rgba(217,88,88,0.40)",
   },
-  inlineActionPressed: { opacity: 0.76, transform: [{ scale: 0.98 }] },
   adminInlineActionText: { color: "#F7F1E8", fontSize: 12, fontWeight: "900" },
   adminInlineDangerText: { color: "#FFD1D1" },
   detailSection: {
@@ -535,41 +569,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  detailActionPanel: {
-    borderRadius: 24,
-    backgroundColor: "rgba(247,241,232,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(247,241,232,0.10)",
-    padding: 12,
-    gap: 10,
-  },
-  detailActionTitle: {
-    color: "rgba(247,241,232,0.78)",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-  cardActions: { flexDirection: "row", gap: 10, marginTop: 2 },
-  actionButtonDisabled: { opacity: 0.46 },
-  darkJoinButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 18,
-    backgroundColor: "rgba(10,17,14,0.88)",
-    borderWidth: 1,
-    borderColor: "rgba(227,219,208,0.18)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  darkJoinText: { color: "#F7F1E8", fontWeight: "900" },
-  limeJoinButton: {
-    flex: 1,
-    minHeight: 48,
-    borderRadius: 18,
-    backgroundColor: "#8FEA6A",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  limeJoinText: { color: "#0A110E", fontWeight: "900" },
+  detailInlinePanel: { gap: 8 },
   ghostDangerButton: {
     minHeight: 48,
     borderRadius: 18,

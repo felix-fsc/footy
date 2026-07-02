@@ -11,6 +11,7 @@ import { AppLogoImage } from "../branding/Branding";
 import { MapHome } from "../map/MapHome";
 import { ListHome } from "../matches/ListHome";
 import { ModeButton } from "../ui/ModeButton";
+import { greenRipple, motionStyles } from "../ui/Motion";
 import type { HomeMode, MatchResponse } from "../../types/domain";
 
 export function HomeHero({ playedMatchesCount }: { playedMatchesCount: number }) {
@@ -86,7 +87,15 @@ export function HomeToolbar({
           onPress={() => onHomeModeChange("list")}
         />
       </View>
-      <Pressable style={styles.refreshMiniButton} onPress={onRefresh} disabled={loading}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.refreshMiniButton,
+          pressed && !loading && motionStyles.pressGlow,
+        ]}
+        onPress={onRefresh}
+        disabled={loading}
+        android_ripple={greenRipple}
+      >
         {loading ? (
           <ActivityIndicator color="#E3DBD0" />
         ) : (

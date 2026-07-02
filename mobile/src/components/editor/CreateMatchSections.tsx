@@ -3,6 +3,7 @@ import type { SavedFieldResponse } from "../../types/domain";
 import type { MatchLocationMode } from "../../types/domain";
 import { platformShadow } from "../../utils/styleUtils";
 import { Field } from "../ui/FormControls";
+import { motionStyles } from "../ui/Motion";
 import {
   DateSection,
   DurationSection,
@@ -128,7 +129,15 @@ export function CreateMatchForm({
         keyboardType="decimal-pad"
         placeholder="3.50"
       />
-      <Pressable style={styles.createPreviewButton} onPress={onOpenPreview} disabled={loading}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.createPreviewButton,
+          pressed && !loading && motionStyles.pressGlow,
+        ]}
+        onPress={onOpenPreview}
+        disabled={loading}
+        android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
+      >
         <Text style={styles.createPreviewButtonText}>
           {editingMatchId ? "Previsualizar cambios" : "Ver vista previa"}
         </Text>

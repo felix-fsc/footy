@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { MATCH_DURATION_OPTIONS_MINUTES } from "../../constants/matchDuration";
 import type { MatchLocationMode, SavedFieldResponse } from "../../types/domain";
 import { MapPickerIcon } from "../icons/AppIcons";
 import { QuickChip } from "../ui/FormControls";
@@ -269,14 +270,17 @@ export function DurationSection({
     <View style={styles.choiceBlock}>
       <Text style={styles.fieldLabel}>Duracion</Text>
       <View style={styles.quickChipRow}>
-        {["45", "60", "90", "120"].map((minutes) => (
-          <QuickChip
-            key={minutes}
-            label={`${minutes} min`}
-            active={durationMinutes === minutes}
-            onPress={() => onDurationMinutesChange(minutes)}
-          />
-        ))}
+        {MATCH_DURATION_OPTIONS_MINUTES.map((minutes) => {
+          const value = String(minutes);
+          return (
+            <QuickChip
+              key={minutes}
+              label={`${value} min`}
+              active={durationMinutes === value}
+              onPress={() => onDurationMinutesChange(value)}
+            />
+          );
+        })}
       </View>
     </View>
   );

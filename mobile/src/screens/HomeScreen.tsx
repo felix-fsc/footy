@@ -13,6 +13,7 @@ import {
   HomeToolbar,
 } from "../components/home/HomeSections";
 import { BottomNav } from "../components/navigation/BottomNav";
+import { Entrance } from "../components/ui/Motion";
 import type { HomeMode, MatchResponse } from "../types/domain";
 
 const MOBILE_EDGE_PADDING = 0;
@@ -75,27 +76,42 @@ export function HomeScreen({
       <ScreenBubbles />
       <View style={[styles.homeShell, { paddingTop: layout.topInset }]}>
         <View style={styles.homeContent}>
-          <View style={styles.homeHeader}>
+          <Entrance style={styles.homeHeader} visibleKey={homeMode} distance={10}>
             <HomeHero playedMatchesCount={playedMatchesCount} />
-          </View>
+          </Entrance>
 
-          <View style={styles.homeSearchWrap}>
+          <Entrance
+            style={styles.homeSearchWrap}
+            visibleKey={homeMode}
+            delay={50}
+            distance={12}
+          >
             <HomeSearch
               searchQuery={searchQuery}
               onSearchQueryChange={actions.onSearchQueryChange}
             />
-          </View>
+          </Entrance>
 
-          <View style={styles.homeToolbar}>
+          <Entrance
+            style={styles.homeToolbar}
+            visibleKey={homeMode}
+            delay={90}
+            distance={12}
+          >
             <HomeToolbar
               homeMode={homeMode}
               loading={loading}
               onHomeModeChange={actions.onHomeModeChange}
               onRefresh={actions.onRefresh}
             />
-          </View>
+          </Entrance>
 
-          <View style={styles.homeBody}>
+          <Entrance
+            style={styles.homeBody}
+            visibleKey={homeMode}
+            delay={130}
+            distance={16}
+          >
             <HomeBody
               currentUserId={currentUserId}
               homeMode={homeMode}
@@ -109,7 +125,7 @@ export function HomeScreen({
               onOpenDetail={actions.onOpenDetail}
               onSelectMatch={actions.onSelectMatch}
             />
-          </View>
+          </Entrance>
         </View>
       </View>
       <BottomNav

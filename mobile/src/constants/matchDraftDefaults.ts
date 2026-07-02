@@ -1,4 +1,5 @@
 import { DEFAULT_CITY } from "./locations";
+import { DEFAULT_MATCH_DURATION_MINUTES } from "./matchDuration";
 import { DEFAULT_MAP_CENTER } from "../utils/mapUtils";
 
 export const DEFAULT_MATCH_DRAFT = {
@@ -7,7 +8,7 @@ export const DEFAULT_MATCH_DRAFT = {
   address: "Calle Hermanos Alvarez Quintero 13",
   city: DEFAULT_CITY,
   time: "19:00",
-  durationMinutes: "90",
+  durationMinutes: String(DEFAULT_MATCH_DURATION_MINUTES),
   maxPlayers: "5",
   pricePerPerson: "3.50",
   latitude: DEFAULT_MAP_CENTER.latitude,

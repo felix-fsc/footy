@@ -5,6 +5,7 @@ import {
   GOOGLE_IOS_CLIENT_ID,
   GOOGLE_WEB_CLIENT_ID,
 } from "../../api/config";
+import { motionStyles } from "../ui/Motion";
 
 export function GoogleAuthButton({
   configured,
@@ -18,7 +19,11 @@ export function GoogleAuthButton({
   if (!configured) {
     return (
       <Pressable
-        style={[styles.googleButton, styles.googleButtonDisabled]}
+        style={({ pressed }) => [
+          styles.googleButton,
+          styles.googleButtonDisabled,
+          pressed && motionStyles.softPress,
+        ]}
         onPress={() =>
           Alert.alert(
             "Google no esta configurado",
@@ -28,6 +33,7 @@ export function GoogleAuthButton({
         disabled={loading}
         accessibilityRole="button"
         accessibilityLabel="Continuar con Google, aun no configurado"
+        android_ripple={{ color: "rgba(10,17,14,0.12)", borderless: true }}
       >
         <View style={styles.googleMark}>
           <Text style={styles.googleMarkText}>G</Text>
@@ -80,14 +86,16 @@ function ConfiguredGoogleAuthButton({
 
   return (
     <Pressable
-      style={[
+      style={({ pressed }) => [
         styles.googleButton,
         (!googleRequest || loading) && styles.googleButtonDisabled,
+        pressed && motionStyles.softPress,
       ]}
       onPress={submitGoogleAuth}
       disabled={loading}
       accessibilityRole="button"
       accessibilityLabel="Continuar con Google"
+      android_ripple={{ color: "rgba(10,17,14,0.12)", borderless: true }}
     >
       <View style={styles.googleMark}>
         <Text style={styles.googleMarkText}>G</Text>

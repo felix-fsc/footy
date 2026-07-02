@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { ScreenBubbles } from "../components/chrome/ScreenBubbles";
 import { LocationPickerMap } from "../components/map/LocationPickerMap";
+import { Entrance, greenRipple, motionStyles } from "../components/ui/Motion";
 import type { MapLocation } from "../types/domain";
 
 type LocationScreenProps = {
@@ -47,32 +48,40 @@ export function LocationScreen({
           },
         ]}
       >
-        <View style={styles.screenHeader}>
+        <Entrance style={styles.screenHeader} distance={10}>
           <View>
             <Text style={styles.smallLabel}>Ubicacion del partido</Text>
             <Text style={styles.screenTitle}>Mapa</Text>
           </View>
-          <Pressable style={styles.closePill} onPress={onBack}>
+          <Pressable
+            style={({ pressed }) => [styles.closePill, pressed && styles.closePillPressed]}
+            onPress={onBack}
+            android_ripple={greenRipple}
+          >
             <Text style={styles.closePillText}>Volver</Text>
           </Pressable>
-        </View>
-        <View style={styles.locationPickerShell}>
+        </Entrance>
+        <Entrance style={styles.locationPickerShell} delay={70} distance={16}>
           <LocationPickerMap
             value={{ latitude, longitude }}
             city={city}
             fieldName={fieldName}
             onChange={onLocationChange}
           />
-        </View>
-        <View style={styles.locationSummaryCard}>
+        </Entrance>
+        <Entrance style={styles.locationSummaryCard} delay={120} distance={14}>
           <Text style={styles.locationSummaryTitle}>Punto seleccionado</Text>
           <Text style={styles.locationSummaryText}>
             {latitude.toFixed(5)}, {longitude.toFixed(5)}
           </Text>
-          <Pressable style={styles.authButton} onPress={onUseLocation}>
+          <Pressable
+            style={({ pressed }) => [styles.authButton, pressed && styles.authButtonPressed]}
+            onPress={onUseLocation}
+            android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
+          >
             <Text style={styles.authButtonText}>Usar esta ubicacion</Text>
           </Pressable>
-        </View>
+        </Entrance>
       </View>
     </SafeAreaView>
   );
@@ -110,6 +119,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  closePillPressed: motionStyles.pressGlow,
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
   locationPickerShell: {
     flex: 1,
@@ -135,5 +145,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  authButtonPressed: motionStyles.pressGlow,
   authButtonText: { color: "#0A110E", fontSize: 15, fontWeight: "900" },
 });

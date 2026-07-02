@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { MatchResponse } from "../../types/domain";
-import { formatDate } from "../../utils/matchUtils";
+import { formatDate, formatDurationMinutes } from "../../utils/matchUtils";
+import { greenRipple, motionStyles } from "../ui/Motion";
 import { MatchImageBackground } from "./MatchMedia";
 
 export function CompactMatch({
@@ -11,7 +12,14 @@ export function CompactMatch({
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.compactMatch} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [
+        styles.compactMatch,
+        pressed && motionStyles.pressGlow,
+      ]}
+      onPress={onPress}
+      android_ripple={greenRipple}
+    >
       <MatchImageBackground
         match={match}
         imageStyle={styles.compactMatchImage}
@@ -21,9 +29,11 @@ export function CompactMatch({
         <View style={styles.compactMatchContent}>
           <Text style={styles.compactMatchTitle}>{match.title}</Text>
           <Text style={styles.compactMatchMeta}>
-            {formatDate(match.startsAt)} - {match.field?.name ?? "Campo pendiente"}
+            {formatDate(match.startsAt)} -{" "}
+            {formatDurationMinutes(match.durationMinutes)}
           </Text>
           <Text style={styles.compactMatchPlace}>
+            {match.field?.name ?? "Campo pendiente"} -{" "}
             {match.field?.city ?? "Sin ciudad"}
           </Text>
         </View>

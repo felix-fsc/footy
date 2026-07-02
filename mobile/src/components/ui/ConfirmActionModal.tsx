@@ -1,4 +1,5 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Entrance, dangerRipple, greenRipple, motionStyles } from "./Motion";
 
 type ConfirmActionModalProps = {
   confirmLabel: string;
@@ -22,23 +23,32 @@ export function ConfirmActionModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.confirmOverlay}>
-        <View style={styles.confirmSheet}>
+        <Entrance style={styles.confirmSheet} visibleKey={visible} distance={18}>
           <View style={styles.confirmAccent} />
           <Text style={styles.confirmEyebrow}>Confirmar accion</Text>
           <Text style={styles.confirmTitle}>{title}</Text>
           <Text style={styles.confirmMessage}>{message}</Text>
           <View style={styles.confirmActions}>
             <Pressable
-              style={styles.confirmSecondaryButton}
+              style={({ pressed }) => [
+                styles.confirmSecondaryButton,
+                pressed && motionStyles.pressGlow,
+              ]}
               onPress={onCancel}
               disabled={loading}
+              android_ripple={greenRipple}
             >
               <Text style={styles.confirmSecondaryText}>Volver</Text>
             </Pressable>
             <Pressable
-              style={[styles.confirmDangerButton, loading && styles.confirmButtonDisabled]}
+              style={({ pressed }) => [
+                styles.confirmDangerButton,
+                loading && styles.confirmButtonDisabled,
+                pressed && motionStyles.dangerPressGlow,
+              ]}
               onPress={onConfirm}
               disabled={loading}
+              android_ripple={dangerRipple}
             >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
@@ -47,7 +57,7 @@ export function ConfirmActionModal({
               )}
             </Pressable>
           </View>
-        </View>
+        </Entrance>
       </View>
     </Modal>
   );

@@ -1,8 +1,13 @@
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MatchResponse } from "../../types/domain";
-import { formatDate, userParticipatesInMatch } from "../../utils/matchUtils";
+import {
+  formatDate,
+  formatDurationMinutes,
+  userParticipatesInMatch,
+} from "../../utils/matchUtils";
 import { platformShadow } from "../../utils/styleUtils";
 import { StatusBadge } from "../ui/FormControls";
+import { greenRipple, motionStyles } from "../ui/Motion";
 import { MatchImageBackground, OccupancyBar } from "./MatchMedia";
 
 type ListHomeProps = {
@@ -53,14 +58,16 @@ export function ListHome({
           return (
             <Pressable
               key={match.id}
-              style={[
+              style={({ pressed }) => [
                 styles.listCard,
                 match.id === selectedMatchId && styles.listCardSelected,
+                pressed && motionStyles.pressGlow,
               ]}
               onPress={() => {
                 onSelect(match.id);
                 onOpenDetail(match.id);
               }}
+              android_ripple={greenRipple}
             >
               <MatchImageBackground
                 match={match}
@@ -81,6 +88,9 @@ export function ListHome({
                     </Text>
                     <Text style={styles.matchCityPill} numberOfLines={1}>
                       {match.field?.city ?? "Sin ciudad"}
+                    </Text>
+                    <Text style={styles.matchDurationPill} numberOfLines={1}>
+                      {formatDurationMinutes(match.durationMinutes)}
                     </Text>
                     {mine || participating ? (
                       <Text style={styles.matchMinePill}>Apuntado</Text>
@@ -179,6 +189,16 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#8FEA6A",
     color: "#0A110E",
+    fontSize: 9,
+    fontWeight: "900",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  matchDurationPill: {
+    overflow: "hidden",
+    borderRadius: 15,
+    backgroundColor: "rgba(247,241,232,0.14)",
+    color: "#F7F1E8",
     fontSize: 9,
     fontWeight: "900",
     paddingHorizontal: 10,

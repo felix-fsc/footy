@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { greenRipple, motionStyles } from "./Motion";
 
 export function ModeButton({
   label,
@@ -16,7 +17,12 @@ export function ModeButton({
   return (
     <Pressable
       onPress={onPress}
-      style={[styles.modeButton, active && styles.modeButtonActive]}
+      style={({ pressed }) => [
+        styles.modeButton,
+        active && styles.modeButtonActive,
+        pressed && motionStyles.pressGlow,
+      ]}
+      android_ripple={greenRipple}
     >
       <View style={styles.modeIconBox}>
         {resolvedIcon === "map" ? (

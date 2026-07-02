@@ -2,6 +2,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { AppTab } from "../../types/domain";
 import { platformShadow } from "../../utils/styleUtils";
+import { greenRipple, motionStyles } from "../ui/Motion";
 
 const MOBILE_EDGE_PADDING = 10;
 
@@ -24,8 +25,13 @@ export function BottomNav({
   return (
     <View style={[styles.bottomNav, { bottom: bottomInset + 2 }]}>
       <Pressable
-        style={[styles.navItem, active === "home" && styles.navItemActive]}
+        style={({ pressed }) => [
+          styles.navItem,
+          active === "home" && styles.navItemActive,
+          pressed && motionStyles.pressGlow,
+        ]}
         onPress={onHome}
+        android_ripple={greenRipple}
       >
         <Text style={[styles.navIcon, active === "home" && styles.navIconActive]}>
           H
@@ -35,12 +41,14 @@ export function BottomNav({
         </Text>
       </Pressable>
       <Pressable
-        style={[
+        style={({ pressed }) => [
           styles.navItem,
           styles.navCreateItem,
           active === "create" && styles.navItemActive,
+          pressed && motionStyles.pressGlow,
         ]}
         onPress={onCreate}
+        android_ripple={greenRipple}
       >
         <Text
           style={[
@@ -60,8 +68,13 @@ export function BottomNav({
         </Text>
       </Pressable>
       <Pressable
-        style={[styles.navItem, active === "profile" && styles.navItemActive]}
+        style={({ pressed }) => [
+          styles.navItem,
+          active === "profile" && styles.navItemActive,
+          pressed && motionStyles.pressGlow,
+        ]}
         onPress={onProfile}
+        android_ripple={greenRipple}
       >
         <Text
           style={[styles.navIcon, active === "profile" && styles.navIconActive]}

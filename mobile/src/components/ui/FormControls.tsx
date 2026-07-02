@@ -1,6 +1,7 @@
 import { ComponentProps, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { PlayerPosition } from "../../types/domain";
+import { greenRipple, motionStyles } from "./Motion";
 
 export function Field({
   label,
@@ -41,10 +42,14 @@ export function PasswordField({
           style={styles.passwordInput}
         />
         <Pressable
-          style={styles.passwordVisibilityButton}
+          style={({ pressed }) => [
+            styles.passwordVisibilityButton,
+            pressed && motionStyles.softPress,
+          ]}
           onPress={() => setVisible((current) => !current)}
           accessibilityRole="button"
           accessibilityLabel={visible ? "Ocultar contrasena" : "Mostrar contrasena"}
+          android_ripple={greenRipple}
         >
           <Text style={styles.passwordVisibilityText}>
             {visible ? "Ocultar" : "Ver"}
@@ -66,8 +71,13 @@ export function FilterButton({
 }) {
   return (
     <Pressable
-      style={[styles.filterButton, active && styles.filterButtonActive]}
+      style={({ pressed }) => [
+        styles.filterButton,
+        active && styles.filterButtonActive,
+        pressed && motionStyles.pressGlow,
+      ]}
       onPress={onPress}
+      android_ripple={greenRipple}
     >
       <Text
         style={[
@@ -94,8 +104,13 @@ export function PositionButton({
 }) {
   return (
     <Pressable
-      style={[styles.positionButton, active && styles.positionButtonActive]}
+      style={({ pressed }) => [
+        styles.positionButton,
+        active && styles.positionButtonActive,
+        pressed && motionStyles.pressGlow,
+      ]}
       onPress={() => onPress(value)}
+      android_ripple={greenRipple}
     >
       <Text
         style={[
@@ -120,8 +135,13 @@ export function QuickChip({
 }) {
   return (
     <Pressable
-      style={[styles.quickChip, active && styles.quickChipActive]}
+      style={({ pressed }) => [
+        styles.quickChip,
+        active && styles.quickChipActive,
+        pressed && motionStyles.pressGlow,
+      ]}
       onPress={onPress}
+      android_ripple={greenRipple}
     >
       <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
         {label}

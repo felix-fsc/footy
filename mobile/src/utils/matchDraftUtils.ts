@@ -1,5 +1,9 @@
 import type { MatchLocationMode, MatchResponse } from "../types/domain";
 
+const DEFAULT_MATCH_DURATION_MINUTES = 90;
+const MIN_MATCH_DURATION_MINUTES = 30;
+const MAX_MATCH_DURATION_MINUTES = 240;
+
 export type MatchDraftValues = {
   title: string;
   fieldName: string;
@@ -71,13 +75,13 @@ export function validateMatchDraftValues({
   const durationValue = Number(durationMinutes);
   if (
     !Number.isInteger(durationValue) ||
-    durationValue < 30 ||
-    durationValue > 240
+    durationValue < MIN_MATCH_DURATION_MINUTES ||
+    durationValue > MAX_MATCH_DURATION_MINUTES
   ) {
     return {
       ok: false,
       title: "Revisa la duracion",
-      message: "La duracion debe estar entre 30 y 240 minutos.",
+      message: `La duracion debe estar entre ${MIN_MATCH_DURATION_MINUTES} y ${MAX_MATCH_DURATION_MINUTES} minutos.`,
     };
   }
 
@@ -141,7 +145,9 @@ export function draftValuesFromMatch(match: MatchResponse) {
     fieldName: match.field?.name ?? "Campo por confirmar",
     address: match.field?.address ?? "",
     city: match.field?.city ?? "",
-    durationMinutes: String(match.durationMinutes ?? 90),
+    durationMinutes: String(
+      match.durationMinutes ?? DEFAULT_MATCH_DURATION_MINUTES,
+    ),
     maxPlayers: String(match.maxPlayersPerTeam),
     pricePerPerson: (match.pricePerPersonCents / 100).toFixed(2),
   };

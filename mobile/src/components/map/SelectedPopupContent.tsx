@@ -1,8 +1,12 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { MatchResponse } from "../../types/domain";
-import { formatPriceFromCents } from "../../utils/matchUtils";
+import {
+  formatDurationMinutes,
+  formatPriceFromCents,
+} from "../../utils/matchUtils";
 import { MatchImageBackground, OccupancyBar } from "../matches/MatchMedia";
 import { StatusBadge } from "../ui/FormControls";
+import { greenRipple, motionStyles } from "../ui/Motion";
 
 type SelectedPopupContentProps = {
   fieldTitle: string;
@@ -70,9 +74,13 @@ function MatchClusterList({
       {groupedMatches.map((item) => (
         <Pressable
           key={item.id}
-          style={styles.popupMatchOption}
+          style={({ pressed }) => [
+            styles.popupMatchOption,
+            pressed && motionStyles.pressGlow,
+          ]}
           onPress={() => onOpenDetail(item.id)}
           disabled={loading}
+          android_ripple={greenRipple}
         >
           <MatchImageBackground
             match={item}
@@ -99,9 +107,13 @@ function SingleMatchPopup({
 }) {
   return (
     <Pressable
-      style={styles.popupSingleOption}
+      style={({ pressed }) => [
+        styles.popupSingleOption,
+        pressed && motionStyles.pressGlow,
+      ]}
       onPress={() => onOpenDetail(match.id)}
       disabled={loading}
+      android_ripple={greenRipple}
     >
       <PopupMatchContent match={match} showField showTitleLocation />
     </Pressable>
@@ -153,6 +165,12 @@ function PopupMatchContent({
         <View style={styles.popupMatchBubble}>
           <Text style={styles.popupMatchBubbleLabel}>Hora</Text>
           <Text style={styles.popupMatchBubbleValue}>{timeText}</Text>
+        </View>
+        <View style={styles.popupMatchBubble}>
+          <Text style={styles.popupMatchBubbleLabel}>Duracion</Text>
+          <Text style={styles.popupMatchBubbleValue}>
+            {formatDurationMinutes(match.durationMinutes)}
+          </Text>
         </View>
         <View style={styles.popupMatchBubble}>
           <Text style={styles.popupMatchBubbleLabel}>Precio</Text>

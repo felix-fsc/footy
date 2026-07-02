@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import {
+  Animated,
   Platform,
   Pressable,
   SafeAreaView,
@@ -16,7 +17,6 @@ import {
   MatchChatLauncher,
   MatchHero,
   MatchInfoCards,
-  MatchJoinPanel,
   MatchLocationCard,
   MatchPlayersSection,
   matchDetailSectionStyles,
@@ -99,6 +99,47 @@ export function MatchDetailScreen({
     title: string;
     onConfirm: () => void;
   } | null>(null);
+  const entranceMotion = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    entranceMotion.forEach((motion) => motion.setValue(0));
+    Animated.stagger(
+      90,
+      entranceMotion.map((motion) =>
+        Animated.spring(motion, {
+          toValue: 1,
+          useNativeDriver: true,
+          damping: 18,
+          stiffness: 150,
+          mass: 0.82,
+        }),
+      ),
+    ).start();
+  }, [entranceMotion, match?.id]);
+
+  function entranceStyle(index: number, distance = 14) {
+    const motion = entranceMotion[index];
+    return {
+      opacity: motion,
+      transform: [
+        {
+          translateY: motion.interpolate({
+            inputRange: [0, 1],
+            outputRange: [distance, 0],
+          }),
+        },
+        {
+          scale: motion.interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.985, 1],
+          }),
+        },
+      ],
+    };
+  }
 
   function requestDangerAction(action: {
     confirmLabel: string;
@@ -132,19 +173,28 @@ export function MatchDetailScreen({
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.screenHeader}>
+        <Animated.View style={[styles.screenHeader, entranceStyle(0, 10)]}>
           <View>
             <Text style={styles.smallLabel}>Detalle</Text>
             <Text style={styles.screenTitle}>Partido</Text>
           </View>
-          <Pressable style={styles.closePill} onPress={navigation.onHome}>
+          <Pressable
+            style={({ pressed }) => [styles.closePill, pressed && styles.closePillPressed]}
+            onPress={navigation.onHome}
+            android_ripple={{ color: "rgba(143,234,106,0.22)", borderless: false }}
+          >
             <Text style={styles.closePillText}>Volver</Text>
           </Pressable>
-        </View>
+        </Animated.View>
 
         {match ? (
           <>
-            <View style={matchDetailSectionStyles.detailHeroCard}>
+            <Animated.View
+              style={[
+                matchDetailSectionStyles.detailHeroCard,
+                entranceStyle(1, 18),
+              ]}
+            >
               <MatchHero
                 isAdmin={isAdmin}
                 loading={loading}
@@ -188,23 +238,6 @@ export function MatchDetailScreen({
 
                 <MatchPlayersSection
                   isAdmin={isAdmin}
-                  match={match}
-                  onOpenProfile={actions.onOpenProfile}
-                  onRemovePlayer={(matchId, userId, playerName) =>
-                    requestDangerAction({
-                      title: "Quitar jugador",
-                      message: playerName
-                        ? `Vas a quitar a ${playerName} de este partido. Podra volver a unirse si quedan plazas.`
-                        : "Vas a quitar a este jugador del partido. Podra volver a unirse si quedan plazas.",
-                      confirmLabel: "Quitar",
-                      onConfirm: () =>
-                        actions.onRemovePlayer(matchId, userId, playerName),
-                    })
-                  }
-                />
-
-                <MatchJoinPanel
-                  isAdmin={isAdmin}
                   loading={loading}
                   match={match}
                   selectedIsOpen={selectedIsOpen}
@@ -229,6 +262,18 @@ export function MatchDetailScreen({
                       onConfirm: () => actions.onLeaveMatch(matchId),
                     })
                   }
+                  onOpenProfile={actions.onOpenProfile}
+                  onRemovePlayer={(matchId, userId, playerName) =>
+                    requestDangerAction({
+                      title: "Quitar jugador",
+                      message: playerName
+                        ? `Vas a quitar a ${playerName} de este partido. Podra volver a unirse si quedan plazas.`
+                        : "Vas a quitar a este jugador del partido. Podra volver a unirse si quedan plazas.",
+                      confirmLabel: "Quitar",
+                      onConfirm: () =>
+                        actions.onRemovePlayer(matchId, userId, playerName),
+                    })
+                  }
                 />
 
                 <MatchChatLauncher
@@ -238,7 +283,7 @@ export function MatchDetailScreen({
                   onOpenChat={chat.onOpenChat}
                 />
               </View>
-            </View>
+            </Animated.View>
 
             <MatchChatModal
               visible={chat.showMatchChat}
@@ -261,10 +306,10 @@ export function MatchDetailScreen({
             />
           </>
         ) : (
-          <View style={styles.emptyPanel}>
+          <Animated.View style={[styles.emptyPanel, entranceStyle(1, 14)]}>
             <Text style={styles.emptyTitle}>No hay partido seleccionado</Text>
             <Text style={styles.emptyText}>Vuelve al mapa o crea uno nuevo.</Text>
-          </View>
+          </Animated.View>
         )}
       </ScrollView>
       <BottomNav
@@ -321,6 +366,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(227,219,208,0.10)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  closePillPressed: {
+    backgroundColor: "rgba(143,234,106,0.24)",
+    borderColor: "rgba(143,234,106,0.86)",
+    shadowColor: "#8FEA6A",
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+    transform: [{ scale: 0.98 }],
   },
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
   emptyPanel: {

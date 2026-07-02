@@ -1,5 +1,9 @@
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
-import { formatDraftPrice } from "../../utils/matchUtils";
+import {
+  formatDraftPrice,
+  formatDurationMinutes,
+} from "../../utils/matchUtils";
+import { Entrance, greenRipple, motionStyles } from "../ui/Motion";
 
 type CreatePreviewModalProps = {
   city: string;
@@ -39,7 +43,7 @@ export function CreatePreviewModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.previewOverlay}>
-        <View style={styles.previewSheet}>
+        <Entrance style={styles.previewSheet} visibleKey={visible} distance={26}>
           <View style={styles.previewBubbleOne} />
           <View style={styles.previewBubbleTwo} />
           <View style={styles.previewHandle} />
@@ -51,7 +55,10 @@ export function CreatePreviewModal({
           </Text>
           <View style={styles.previewInfoGrid}>
             <PreviewInfo label="Fecha" value={`${date} - ${time}`} />
-            <PreviewInfo label="Duracion" value={`${durationMinutes} min`} />
+            <PreviewInfo
+              label="Duracion"
+              value={formatDurationMinutes(Number(durationMinutes))}
+            />
             <PreviewInfo label="Formato" value={`${players} vs ${players}`} />
             <PreviewInfo
               label="Precio"
@@ -63,13 +70,25 @@ export function CreatePreviewModal({
             />
           </View>
           <View style={styles.previewActions}>
-            <Pressable style={styles.previewSecondaryButton} onPress={onClose}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.previewSecondaryButton,
+                pressed && motionStyles.pressGlow,
+              ]}
+              onPress={onClose}
+              android_ripple={greenRipple}
+            >
               <Text style={styles.previewSecondaryText}>Editar</Text>
             </Pressable>
             <Pressable
-              style={styles.previewPrimaryButton}
+              style={({ pressed }) => [
+                styles.previewPrimaryButton,
+                loading && styles.previewButtonDisabled,
+                pressed && motionStyles.pressGlow,
+              ]}
               onPress={onCreate}
               disabled={loading}
+              android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
             >
               {loading ? (
                 <ActivityIndicator color="#0A110E" />
@@ -80,7 +99,7 @@ export function CreatePreviewModal({
               )}
             </Pressable>
           </View>
-        </View>
+        </Entrance>
       </View>
     </Modal>
   );
@@ -187,5 +206,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  previewButtonDisabled: { opacity: 0.62 },
   previewPrimaryText: { color: "#0A110E", fontWeight: "900" },
 });

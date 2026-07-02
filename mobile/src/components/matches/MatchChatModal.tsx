@@ -4,6 +4,7 @@ import { formatTime, publicHandle } from "../../utils/matchUtils";
 import { platformShadow } from "../../utils/styleUtils";
 import { RefreshIcon } from "../icons/AppIcons";
 import { QuickMessageButton } from "../home/HomeWidgets";
+import { Entrance, greenRipple, motionStyles } from "../ui/Motion";
 
 type MatchChatModalProps = {
   visible: boolean;
@@ -37,10 +38,11 @@ export function MatchChatModal({
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.chatModalBackdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.chatSheet, { paddingBottom: bottomInset + 14 }]}
-          onPress={(event) => event.stopPropagation()}
-        >
+        <Entrance visibleKey={visible} distance={26}>
+          <Pressable
+            style={[styles.chatSheet, { paddingBottom: bottomInset + 14 }]}
+            onPress={(event) => event.stopPropagation()}
+          >
           <View style={styles.chatHandle} />
           <View style={styles.chatHeader}>
             <View>
@@ -49,13 +51,24 @@ export function MatchChatModal({
             </View>
             <View style={styles.chatHeaderActions}>
               <Pressable
-                style={styles.chatIconButton}
+                style={({ pressed }) => [
+                  styles.chatIconButton,
+                  pressed && motionStyles.pressGlow,
+                ]}
                 onPress={onRefresh}
                 disabled={loading}
+                android_ripple={greenRipple}
               >
                 <RefreshIcon />
               </Pressable>
-              <Pressable style={styles.chatCloseButton} onPress={onClose}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.chatCloseButton,
+                  pressed && motionStyles.pressGlow,
+                ]}
+                onPress={onClose}
+                android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
+              >
                 <Text style={styles.chatCloseText}>Cerrar</Text>
               </Pressable>
             </View>
@@ -121,14 +134,20 @@ export function MatchChatModal({
               editable={participant && !loading}
             />
             <Pressable
-              style={[styles.sendButton, !participant && styles.sendButtonDisabled]}
+              style={({ pressed }) => [
+                styles.sendButton,
+                !participant && styles.sendButtonDisabled,
+                pressed && participant && motionStyles.pressGlow,
+              ]}
               onPress={onSend}
               disabled={!participant || loading}
+              android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
             >
               <Text style={styles.sendButtonText}>Enviar</Text>
             </Pressable>
           </View>
-        </Pressable>
+          </Pressable>
+        </Entrance>
       </Pressable>
     </Modal>
   );

@@ -20,6 +20,7 @@ import {
   ProfileStatsRow,
 } from "../components/profile/ProfileSections";
 import { ConfirmActionModal } from "../components/ui/ConfirmActionModal";
+import { Entrance, dangerRipple, greenRipple, motionStyles } from "../components/ui/Motion";
 import type {
   MatchResponse,
   PlayerPosition,
@@ -124,66 +125,86 @@ export function ProfileScreen({
           },
         ]}
       >
-        <View style={styles.profileHeader}>
-          <Pressable style={styles.backButton} onPress={navigation.onHome}>
+        <Entrance style={styles.profileHeader} distance={10}>
+          <Pressable
+            style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+            onPress={navigation.onHome}
+            android_ripple={greenRipple}
+          >
             <Text style={styles.backButtonText}>{"<"}</Text>
           </Pressable>
           <Text style={styles.profileTitle}>Perfil</Text>
-          <Pressable style={styles.logoutPill} onPress={profileActions.onLogout}>
+          <Pressable
+            style={({ pressed }) => [styles.logoutPill, pressed && styles.logoutPillPressed]}
+            onPress={profileActions.onLogout}
+            android_ripple={dangerRipple}
+          >
             <Text style={styles.logoutText}>Salir</Text>
           </Pressable>
-        </View>
+        </Entrance>
 
-        <ProfileHero
-          isAdmin={admin.isAdmin}
-          profile={profile}
-          profileCity={profileCity}
-          profileEditing={profileEditing}
-          profilePosition={profilePosition}
-          userName={userName}
-          playedMatchesCount={playedMatchesCount}
-          onToggleEditing={profileActions.onToggleEditing}
-        />
+        <Entrance delay={60} distance={14}>
+          <ProfileHero
+            isAdmin={admin.isAdmin}
+            profile={profile}
+            profileCity={profileCity}
+            profileEditing={profileEditing}
+            profilePosition={profilePosition}
+            userName={userName}
+            playedMatchesCount={playedMatchesCount}
+            onToggleEditing={profileActions.onToggleEditing}
+          />
+        </Entrance>
 
         {admin.isAdmin ? (
-          <AdminFieldsPanel
-            admin={admin}
-            loading={loading}
-            onAddressChange={adminActions.onAddressChange}
-            onCityChange={adminActions.onCityChange}
-            onDeleteField={setFieldToDelete}
-            onLatitudeChange={adminActions.onLatitudeChange}
-            onLongitudeChange={adminActions.onLongitudeChange}
-            onNameChange={adminActions.onNameChange}
-            onSaveField={adminActions.onSaveField}
-            onStartFieldCreate={adminActions.onStartFieldCreate}
-            onStartFieldEdit={adminActions.onStartFieldEdit}
-          />
+          <Entrance delay={100} distance={14}>
+            <AdminFieldsPanel
+              admin={admin}
+              loading={loading}
+              onAddressChange={adminActions.onAddressChange}
+              onCityChange={adminActions.onCityChange}
+              onDeleteField={setFieldToDelete}
+              onLatitudeChange={adminActions.onLatitudeChange}
+              onLongitudeChange={adminActions.onLongitudeChange}
+              onNameChange={adminActions.onNameChange}
+              onSaveField={adminActions.onSaveField}
+              onStartFieldCreate={adminActions.onStartFieldCreate}
+              onStartFieldEdit={adminActions.onStartFieldEdit}
+            />
+          </Entrance>
         ) : null}
 
         {profileEditing ? (
-          <ProfileEditor
-            bio={profileBio}
-            city={profileCity}
-            fullName={profileFullName}
-            loading={loading}
-            position={profilePosition}
-            username={profileUsername}
-            onBioChange={profileActions.onBioChange}
-            onCityChange={profileActions.onCityChange}
-            onFullNameChange={profileActions.onFullNameChange}
-            onPositionChange={profileActions.onPositionChange}
-            onSaveProfile={profileActions.onSaveProfile}
-            onUsernameChange={profileActions.onUsernameChange}
-          />
+          <Entrance visibleKey="profile-editor" delay={120} distance={14}>
+            <ProfileEditor
+              bio={profileBio}
+              city={profileCity}
+              fullName={profileFullName}
+              loading={loading}
+              position={profilePosition}
+              username={profileUsername}
+              onBioChange={profileActions.onBioChange}
+              onCityChange={profileActions.onCityChange}
+              onFullNameChange={profileActions.onFullNameChange}
+              onPositionChange={profileActions.onPositionChange}
+              onSaveProfile={profileActions.onSaveProfile}
+              onUsernameChange={profileActions.onUsernameChange}
+            />
+          </Entrance>
         ) : null}
 
-        <ProfileStatsRow
-          upcomingMatchesCount={myMatches.length}
-          playedMatchesCount={playedMatchesCount}
-        />
-        <NextMatchCard nextMyMatch={nextMyMatch} onOpenMatch={navigation.onOpenMatch} />
-        <MyMatchesSection matches={myMatches} onOpenMatch={navigation.onOpenMatch} />
+        <Entrance delay={150} distance={14}>
+          <ProfileStatsRow
+            upcomingMatchesCount={myMatches.length}
+            playedMatchesCount={playedMatchesCount}
+          />
+        </Entrance>
+        <Entrance delay={190} distance={14}>
+          <NextMatchCard nextMyMatch={nextMyMatch} onOpenMatch={navigation.onOpenMatch} />
+        </Entrance>
+        <Entrance delay={230} distance={14}>
+          <MyMatchesSection matches={myMatches} onOpenMatch={navigation.onOpenMatch} />
+        </Entrance>
       </ScrollView>
       <BottomNav
         active="profile"
@@ -237,6 +258,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  backButtonPressed: motionStyles.pressGlow,
   backButtonText: { color: "#E3DBD0", fontSize: 30, fontWeight: "700" },
   profileTitle: { color: "#E3DBD0", fontSize: 20, fontWeight: "900" },
   logoutPill: {
@@ -249,5 +271,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  logoutPillPressed: motionStyles.dangerPressGlow,
   logoutText: { color: "#F7F1E8", fontWeight: "900" },
 });

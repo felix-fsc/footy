@@ -4,6 +4,7 @@ import { platformShadow } from "../../utils/styleUtils";
 import { AppLogoImage } from "../branding/Branding";
 import { Field, PasswordField } from "../ui/FormControls";
 import { ModeButton } from "../ui/ModeButton";
+import { motionStyles } from "../ui/Motion";
 import { GoogleAuthButton } from "./GoogleAuthButton";
 
 export function AuthHero() {
@@ -72,9 +73,14 @@ export function AuthCard({
       />
       <AuthErrorBanner authError={authError} />
       <Pressable
-        style={[styles.authButton, loading && styles.authButtonDisabled]}
+        style={({ pressed }) => [
+          styles.authButton,
+          loading && styles.authButtonDisabled,
+          pressed && !loading && motionStyles.pressGlow,
+        ]}
         onPress={onSubmit}
         disabled={loading}
+        android_ripple={{ color: "rgba(10,17,14,0.18)", borderless: false }}
       >
         {loading ? (
           <ActivityIndicator color="#0A110E" />

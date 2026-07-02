@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { AuthCard, AuthHero } from "../components/auth/AuthSections";
 import { ScreenBubbles } from "../components/chrome/ScreenBubbles";
+import { Entrance } from "../components/ui/Motion";
 import type { AuthMode } from "../types/domain";
 
 type AuthScreenProps = {
@@ -48,22 +49,26 @@ export function AuthScreen({
         contentContainerStyle={styles.authContent}
         keyboardShouldPersistTaps="handled"
       >
-        <AuthHero />
-        <AuthCard
-          authError={authError}
-          authMode={authMode}
-          displayName={displayName}
-          email={email}
-          googleLoginConfigured={googleLoginConfigured}
-          loading={loading}
-          password={password}
-          onAuthModeChange={onAuthModeChange}
-          onDisplayNameChange={onDisplayNameChange}
-          onEmailChange={onEmailChange}
-          onGoogleToken={onGoogleToken}
-          onPasswordChange={onPasswordChange}
-          onSubmit={onSubmit}
-        />
+        <Entrance visibleKey={authMode} distance={10}>
+          <AuthHero />
+        </Entrance>
+        <Entrance visibleKey={authMode} delay={70} distance={16}>
+          <AuthCard
+            authError={authError}
+            authMode={authMode}
+            displayName={displayName}
+            email={email}
+            googleLoginConfigured={googleLoginConfigured}
+            loading={loading}
+            password={password}
+            onAuthModeChange={onAuthModeChange}
+            onDisplayNameChange={onDisplayNameChange}
+            onEmailChange={onEmailChange}
+            onGoogleToken={onGoogleToken}
+            onPasswordChange={onPasswordChange}
+            onSubmit={onSubmit}
+          />
+        </Entrance>
       </ScrollView>
     </SafeAreaView>
   );

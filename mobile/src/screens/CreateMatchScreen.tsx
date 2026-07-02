@@ -15,6 +15,7 @@ import {
 } from "../components/editor/CreateMatchSections";
 import { CreatePreviewModal } from "../components/editor/CreatePreviewModal";
 import { BottomNav } from "../components/navigation/BottomNav";
+import { Entrance, greenRipple, motionStyles } from "../components/ui/Motion";
 import type {
   MatchLocationMode,
   MatchResponse,
@@ -116,7 +117,7 @@ export function CreateMatchScreen({
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.screenHeader}>
+        <Entrance style={styles.screenHeader} visibleKey={editingMatchId ?? "create"} distance={10}>
           <View>
             {editingMatchId ? (
               <Text style={styles.smallLabel}>Editando partido</Text>
@@ -132,47 +133,52 @@ export function CreateMatchScreen({
               pressed && styles.closePillPressed,
             ]}
             onPress={actions.onClose}
+            android_ripple={greenRipple}
           >
             <Text style={styles.closePillText}>
               {editingMatchId ? "Volver" : "Cerrar"}
             </Text>
           </Pressable>
-        </View>
+        </Entrance>
 
         {editingMatchId ? (
-          <EditMatchBanner selectedMatch={selectedMatch} title={title} />
+          <Entrance visibleKey={editingMatchId} delay={60} distance={12}>
+            <EditMatchBanner selectedMatch={selectedMatch} title={title} />
+          </Entrance>
         ) : null}
 
-        <CreateMatchForm
-          city={city}
-          date={date}
-          durationMinutes={durationMinutes}
-          editingMatchId={editingMatchId}
-          fieldName={fieldName}
-          latitude={latitude}
-          loading={loading}
-          longitude={longitude}
-          locationMode={locationMode}
-          maxPlayers={maxPlayers}
-          pricePerPerson={pricePerPerson}
-          savedFields={savedFields}
-          selectedSavedFieldId={selectedSavedFieldId}
-          showCalendar={showCalendar}
-          time={time}
-          title={title}
-          onDateChange={actions.onDateChange}
-          onDurationMinutesChange={actions.onDurationMinutesChange}
-          onFieldNameChange={actions.onFieldNameChange}
-          onLocationModeChange={actions.onLocationModeChange}
-          onMaxPlayersChange={actions.onMaxPlayersChange}
-          onOpenLocationPicker={actions.onOpenLocationPicker}
-          onOpenPreview={actions.onOpenPreview}
-          onPricePerPersonChange={actions.onPricePerPersonChange}
-          onSelectSavedField={actions.onSelectSavedField}
-          onTimeChange={actions.onTimeChange}
-          onTitleChange={actions.onTitleChange}
-          onToggleCalendar={actions.onToggleCalendar}
-        />
+        <Entrance visibleKey={editingMatchId ?? "create"} delay={editingMatchId ? 110 : 60} distance={16}>
+          <CreateMatchForm
+            city={city}
+            date={date}
+            durationMinutes={durationMinutes}
+            editingMatchId={editingMatchId}
+            fieldName={fieldName}
+            latitude={latitude}
+            loading={loading}
+            longitude={longitude}
+            locationMode={locationMode}
+            maxPlayers={maxPlayers}
+            pricePerPerson={pricePerPerson}
+            savedFields={savedFields}
+            selectedSavedFieldId={selectedSavedFieldId}
+            showCalendar={showCalendar}
+            time={time}
+            title={title}
+            onDateChange={actions.onDateChange}
+            onDurationMinutesChange={actions.onDurationMinutesChange}
+            onFieldNameChange={actions.onFieldNameChange}
+            onLocationModeChange={actions.onLocationModeChange}
+            onMaxPlayersChange={actions.onMaxPlayersChange}
+            onOpenLocationPicker={actions.onOpenLocationPicker}
+            onOpenPreview={actions.onOpenPreview}
+            onPricePerPersonChange={actions.onPricePerPersonChange}
+            onSelectSavedField={actions.onSelectSavedField}
+            onTimeChange={actions.onTimeChange}
+            onTitleChange={actions.onTitleChange}
+            onToggleCalendar={actions.onToggleCalendar}
+          />
+        </Entrance>
       </ScrollView>
       <CreatePreviewModal
         visible={showPreview}
@@ -236,6 +242,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(143,234,106,0.13)",
     borderColor: "rgba(143,234,106,0.30)",
   },
-  closePillPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
+  closePillPressed: motionStyles.pressGlow,
   closePillText: { color: "#E3DBD0", fontWeight: "900" },
 });

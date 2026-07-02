@@ -6,6 +6,8 @@ import type {
   TeamSide,
 } from "../types/domain";
 
+const DEFAULT_MATCH_DURATION_MINUTES = 90;
+
 const MATCH_COVER_IMAGES = [
   "https://images.unsplash.com/photo-1518604666860-9ed391f76460?auto=format&fit=crop&w=1000&q=72",
   "https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1000&q=72",
@@ -71,7 +73,7 @@ export function formatDraftPrice(value: string) {
 }
 
 export function formatDurationMinutes(value: number | null | undefined) {
-  const minutes = value ?? 90;
+  const minutes = value ?? DEFAULT_MATCH_DURATION_MINUTES;
   if (minutes < 60) {
     return `${minutes} min`;
   }

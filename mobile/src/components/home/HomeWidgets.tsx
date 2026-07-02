@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { greenRipple, motionStyles } from "../ui/Motion";
 
 export function HomeMetric({ value, label }: { value: number; label: string }) {
   return (
@@ -20,9 +21,14 @@ export function QuickMessageButton({
 }) {
   return (
     <Pressable
-      style={[styles.quickMessageButton, disabled && styles.quickMessageDisabled]}
+      style={({ pressed }) => [
+        styles.quickMessageButton,
+        disabled && styles.quickMessageDisabled,
+        pressed && !disabled && motionStyles.pressGlow,
+      ]}
       onPress={onPress}
       disabled={disabled}
+      android_ripple={greenRipple}
     >
       <Text style={styles.quickMessageText}>{label}</Text>
     </Pressable>

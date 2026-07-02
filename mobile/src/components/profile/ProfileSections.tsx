@@ -8,7 +8,12 @@ import type {
   PlayerProfileResponse,
   SavedFieldResponse,
 } from "../../types/domain";
-import { formatDate, positionLabel, publicHandle } from "../../utils/matchUtils";
+import {
+  formatDate,
+  formatDurationMinutes,
+  positionLabel,
+  publicHandle,
+} from "../../utils/matchUtils";
 import { ProfileStat } from "./ProfileWidgets";
 
 type ProfileHeroProps = {
@@ -282,6 +287,7 @@ export function NextMatchCard({
           <Text style={styles.nextMatchTitle}>{nextMyMatch.title}</Text>
           <Text style={styles.nextMatchMeta}>
             {formatDate(nextMyMatch.startsAt)} -{" "}
+            {formatDurationMinutes(nextMyMatch.durationMinutes)} -{" "}
             {nextMyMatch.field?.name ?? "Campo pendiente"}
           </Text>
         </Pressable>

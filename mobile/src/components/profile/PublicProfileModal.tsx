@@ -2,6 +2,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import type { PlayerProfileResponse } from "../../types/domain";
 import { positionLabel, publicHandle } from "../../utils/matchUtils";
 import { platformShadow } from "../../utils/styleUtils";
+import { Entrance, greenRipple, motionStyles } from "../ui/Motion";
 
 type PublicProfileModalProps = {
   visible: boolean;
@@ -22,10 +23,11 @@ export function PublicProfileModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.publicProfileBackdrop} onPress={onClose}>
-        <Pressable
-          style={styles.publicProfileCard}
-          onPress={(event) => event.stopPropagation()}
-        >
+        <Entrance visibleKey={profile?.id ?? visible} distance={18}>
+          <Pressable
+            style={styles.publicProfileCard}
+            onPress={(event) => event.stopPropagation()}
+          >
           <View style={styles.publicProfileTop}>
             <View style={styles.publicProfileAvatar}>
               <Text style={styles.publicProfileAvatarText}>
@@ -37,7 +39,14 @@ export function PublicProfileModal({
                   .toUpperCase()}
               </Text>
             </View>
-            <Pressable style={styles.publicProfileClose} onPress={onClose}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.publicProfileClose,
+                pressed && motionStyles.pressGlow,
+              ]}
+              onPress={onClose}
+              android_ripple={greenRipple}
+            >
               <Text style={styles.publicProfileCloseText}>Cerrar</Text>
             </Pressable>
           </View>
@@ -68,7 +77,8 @@ export function PublicProfileModal({
               Este jugador todavia no ha escrito una bio.
             </Text>
           )}
-        </Pressable>
+          </Pressable>
+        </Entrance>
       </Pressable>
     </Modal>
   );
